@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#070b14" />
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#c9a227" stroke-opacity="0.35" />
+  <text x="32" y="43" text-anchor="middle" font-family="Georgia, 'Playfair Display', serif" font-size="30" font-weight="700" fill="#c9a227">H</text>
+</svg>
