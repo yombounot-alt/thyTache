@@ -65,6 +65,13 @@ export function useRecentActivity(limit = 8, scope?: TaskFilters["scope"]) {
   })
 }
 
+export function useTrashedTasksQuery() {
+  return useQuery({
+    queryKey: ["tasks", "trash"],
+    queryFn: () => taskService.listTrash(),
+  })
+}
+
 export function useTaskMutations() {
   const queryClient = useQueryClient()
 
@@ -95,6 +102,11 @@ export function useTaskMutations() {
     onSuccess: invalidateAll,
   })
 
+  const restoreTask = useMutation({
+    mutationFn: (id: string) => taskService.restore(id),
+    onSuccess: invalidateAll,
+  })
+
   const addComment = useMutation({
     mutationFn: ({
       taskId,
@@ -121,5 +133,5 @@ export function useTaskMutations() {
     onSuccess: invalidateAll,
   })
 
-  return { createTask, updateTask, deleteTask, addComment, addAttachment }
+  return { createTask, updateTask, deleteTask, restoreTask, addComment, addAttachment }
 }

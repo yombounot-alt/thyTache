@@ -31,6 +31,10 @@ const router = Router();
  *         name: scope
  *         schema: { type: string, enum: [mine, all], default: mine }
  *       - in: query
+ *         name: deleted
+ *         schema: { type: boolean, default: false }
+ *         description: "true = liste la corbeille (tâches supprimées logiquement) au lieu des tâches actives"
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query

@@ -123,6 +123,7 @@ async function listTasks(
     category,
     assigneeId,
     scope,
+    deleted,
   },
   user
 ) {
@@ -132,6 +133,11 @@ async function listTasks(
   pageSize = Number(pageSize) || 10;
 
   const filter = resolveFilter(user, scope);
+  // `deleted=true` bascule la liste normale en « corbeille » : mêmes règles
+  // de scope (créateur/assigné, ou toute la plateforme pour un admin avec
+  // scope=all), seule la tâche est inversée. La restauration elle-même reste
+  // réservée au créateur (cf. restoreTask), la lecture ici est plus permissive.
+  if (deleted === 'true') filter.isDeleted = true;
 
   if (search) {
     const regex = new RegExp(escapeRegex(search), 'i');

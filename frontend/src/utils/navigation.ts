@@ -7,6 +7,7 @@ import {
   ListTodoIcon,
   MailIcon,
   ShieldIcon,
+  Trash2Icon,
   UserCogIcon,
   UserIcon,
   UsersIcon,
@@ -36,6 +37,7 @@ export const workspaceNavSections: NavSection[] = [
       { label: "Vue Kanban", path: "/tasks/kanban", icon: KanbanSquareIcon },
       { label: "Vue Calendrier", path: "/tasks/calendar", icon: CalendarDaysIcon },
       { label: "Vue Cartes", path: "/tasks/cards", icon: LayoutGridIcon },
+      { label: "Corbeille", path: "/tasks/trash", icon: Trash2Icon },
     ],
   },
   {

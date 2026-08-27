@@ -252,6 +252,39 @@ describe('PATCH /tasks/:id/restore', () => {
   });
 });
 
+describe('GET /tasks?deleted=true (corbeille)', () => {
+  it('liste les tâches supprimées et exclut les tâches actives', async () => {
+    const { accessToken } = await loginAs({ email: 'trash-list@example.com' });
+    await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload({ title: 'Active' }));
+    const deleted = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload({ title: 'Supprimée' }));
+    await request(app).delete(`${base}/${deleted.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const trash = await request(app).get(base).query({ deleted: 'true' }).set('Authorization', `Bearer ${accessToken}`);
+    expect(trash.body.data.data).toHaveLength(1);
+    expect(trash.body.data.data[0].title).toBe('Supprimée');
+
+    const normal = await request(app).get(base).set('Authorization', `Bearer ${accessToken}`);
+    expect(normal.body.data.data).toHaveLength(1);
+    expect(normal.body.data.data[0].title).toBe('Active');
+  });
+
+  it("n'expose pas la corbeille d'un autre utilisateur", async () => {
+    const { accessToken: tokenA } = await loginAs({ email: 'trash-scope-a@example.com' });
+    const { accessToken: tokenB } = await loginAs({ email: 'trash-scope-b@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${tokenA}`).send(validTaskPayload());
+    await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${tokenA}`);
+
+    const res = await request(app).get(base).query({ deleted: 'true' }).set('Authorization', `Bearer ${tokenB}`);
+    expect(res.body.data.data).toHaveLength(0);
+  });
+
+  it('rejette une valeur invalide pour deleted (422)', async () => {
+    const { accessToken } = await loginAs({ email: 'trash-invalid@example.com' });
+    const res = await request(app).get(base).query({ deleted: 'oui' }).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.status).toBe(422);
+  });
+});
+
 describe('POST /tasks/:id/comments', () => {
   it('ajoute un commentaire à une tâche accessible', async () => {
     const { accessToken } = await loginAs({ email: 'task-comment@example.com' });

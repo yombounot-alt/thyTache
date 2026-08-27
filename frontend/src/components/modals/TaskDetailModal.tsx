@@ -347,7 +347,7 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Supprimer cette tâche ?"
-        description="Cette tâche ne sera plus visible dans votre liste."
+        description="Cette tâche ne sera plus visible dans votre liste, mais reste récupérable depuis la corbeille."
         onConfirm={handleDelete}
         isLoading={deleteTask.isPending}
       />

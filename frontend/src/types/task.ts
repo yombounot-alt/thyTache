@@ -52,6 +52,9 @@ export interface Task {
   comments: TaskComment[]
   attachments: TaskAttachment[]
   history: TaskHistoryEntry[]
+  isDeleted: boolean
+  deletedAt: string | null
+  deletedById: string | null
 }
 
 export interface TaskFilters {
@@ -63,6 +66,8 @@ export interface TaskFilters {
   // Admin uniquement : "all" retourne les tâches de toute la plateforme.
   // Ignoré côté backend pour un utilisateur standard (toujours "mine").
   scope?: "all" | "mine"
+  // true = corbeille (tâches supprimées logiquement) au lieu des tâches actives.
+  deleted?: boolean
 }
 
 export interface TaskStats {

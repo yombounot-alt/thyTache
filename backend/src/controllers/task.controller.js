@@ -18,9 +18,9 @@ const createTask = catchAsync(async (req, res) => {
 });
 
 const listTasks = catchAsync(async (req, res) => {
-  const { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope } = req.query;
+  const { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope, deleted } = req.query;
   const result = await taskService.listTasks(
-    { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope },
+    { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope, deleted },
     req.user
   );
 

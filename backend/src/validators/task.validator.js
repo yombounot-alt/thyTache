@@ -95,6 +95,7 @@ const listTasksValidator = [
   query('sortDir').optional().isIn(['asc', 'desc']).withMessage('sortDir doit être "asc" ou "desc"'),
   query('assigneeId').optional().isMongoId().withMessage("L'identifiant de l'assigné est invalide"),
   scopeQuery,
+  query('deleted').optional().isIn(['true', 'false']).withMessage('deleted doit être "true" ou "false"'),
   enumListQuery('status', TASK_STATUSES, 'status'),
   enumListQuery('priority', TASK_PRIORITIES, 'priority'),
   enumListQuery('category', TASK_CATEGORIES, 'category'),

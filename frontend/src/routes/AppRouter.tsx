@@ -24,6 +24,7 @@ const TaskListPage = lazy(() => import("@/pages/tasks/TaskListPage"))
 const TaskKanbanPage = lazy(() => import("@/pages/tasks/TaskKanbanPage"))
 const TaskCalendarPage = lazy(() => import("@/pages/tasks/TaskCalendarPage"))
 const TaskCardsPage = lazy(() => import("@/pages/tasks/TaskCardsPage"))
+const TaskTrashPage = lazy(() => import("@/pages/tasks/TaskTrashPage"))
 const ProfilePage = lazy(() => import("@/pages/profile/ProfilePage"))
 const NotificationsPage = lazy(() => import("@/pages/notifications/NotificationsPage"))
 
@@ -72,6 +73,7 @@ export const router = createBrowserRouter([
           { path: "/tasks/kanban", element: withSuspense(<TaskKanbanPage />) },
           { path: "/tasks/calendar", element: withSuspense(<TaskCalendarPage />) },
           { path: "/tasks/cards", element: withSuspense(<TaskCardsPage />) },
+          { path: "/tasks/trash", element: withSuspense(<TaskTrashPage />) },
           { path: "/profile", element: withSuspense(<ProfilePage />) },
           { path: "/notifications", element: withSuspense(<NotificationsPage />) },
           { path: "/emails-preview", element: withSuspense(<EmailsPreviewGallery />) },

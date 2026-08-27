@@ -44,6 +44,9 @@ interface BackendTask {
   comments: BackendComment[]
   attachments: BackendAttachment[]
   history: BackendHistoryEntry[]
+  isDeleted: boolean
+  deletedAt: string | null
+  deletedById: string | null
 }
 
 function mapBackendTask(raw: BackendTask): Task {
@@ -85,6 +88,9 @@ function mapBackendTask(raw: BackendTask): Task {
       detail: h.detail,
       createdAt: h.createdAt,
     })),
+    isDeleted: raw.isDeleted,
+    deletedAt: raw.deletedAt,
+    deletedById: raw.deletedById,
   }
 }
 
@@ -168,6 +174,24 @@ export const taskService = {
       await api.delete(`/tasks/${id}`)
     } catch (error) {
       throw toApiError(error, "Impossible de supprimer cette tâche.")
+    }
+  },
+
+  async listTrash(): Promise<Task[]> {
+    try {
+      const { data } = await api.get("/tasks", { params: { deleted: true, page: 1, pageSize: 100 } })
+      return (data.data.data as BackendTask[]).map(mapBackendTask)
+    } catch (error) {
+      throw toApiError(error, "Échec du chargement de la corbeille")
+    }
+  },
+
+  async restore(id: string): Promise<Task> {
+    try {
+      const { data } = await api.patch(`/tasks/${id}/restore`)
+      return mapBackendTask(data.data)
+    } catch (error) {
+      throw toApiError(error, "Impossible de restaurer cette tâche.")
     }
   },
 

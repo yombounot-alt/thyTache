@@ -5,14 +5,17 @@ function create(data) {
 }
 
 // Toutes les lectures « normales » excluent les tâches supprimées
-// logiquement : centralisé ici pour ne pas avoir à répéter `isDeleted: false`
-// dans chaque appelant (liste, stats, évolution, activité, etc.).
+// logiquement par défaut : centralisé ici pour ne pas avoir à répéter
+// `isDeleted: false` dans chaque appelant (liste, stats, évolution, etc.).
+// `filter` peut explicitement fournir `isDeleted: true` pour lister la
+// corbeille (cf. task.service.listTasks) : il est fusionné après le défaut,
+// donc il le remplace plutôt que l'inverse.
 function findMany(filter, { skip, limit, sort }) {
-  return Task.find({ ...filter, isDeleted: false }).sort(sort).skip(skip).limit(limit);
+  return Task.find({ isDeleted: false, ...filter }).sort(sort).skip(skip).limit(limit);
 }
 
 function count(filter) {
-  return Task.countDocuments({ ...filter, isDeleted: false });
+  return Task.countDocuments({ isDeleted: false, ...filter });
 }
 
 function findById(id) {
