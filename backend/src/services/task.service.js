@@ -181,6 +181,7 @@ async function updateTask(id, patch, user) {
   }
 
   const wasDone = task.status === 'done';
+  const previousAssigneeId = task.assignee ? String(task.assignee) : null;
 
   if (title !== undefined) task.title = title;
   if (description !== undefined) task.description = description;
@@ -211,6 +212,23 @@ async function updateTask(id, patch, user) {
     });
   }
 
+  // Même règle que createTask : uniquement quand la tâche est réattribuée à
+  // quelqu'un d'autre que l'acteur (évite de se notifier soi-même) — sans ça
+  // un utilisateur réassigné par un admin via PATCH ne l'apprenait jamais.
+  if (
+    assigneeId !== undefined &&
+    assigneeId &&
+    String(assigneeId) !== previousAssigneeId &&
+    String(assigneeId) !== String(userId)
+  ) {
+    await notificationService.notify(assigneeId, {
+      type: 'task_assigned',
+      title: 'Nouvelle tâche assignée',
+      message: `« ${task.title} » vous a été attribuée.`,
+      link: `/tasks/${task.id}`,
+    });
+  }
+
   return task;
 }
 
@@ -220,37 +238,30 @@ async function updateTask(id, patch, user) {
 // Seul le créateur peut supprimer, comme pour la modification (findAccessibleTask) ;
 // un utilisateur non créateur reçoit un 404 (et non 403) pour ne pas révéler
 // l'existence de la tâche, cohérent avec le reste de l'API.
+// La mutation elle-même passe par un findOneAndUpdate atomique
+// (task.repository.softDelete) : deux suppressions concurrentes de la même
+// tâche ne peuvent pas toutes les deux passer le check `isDeleted`, contrairement
+// à un find() suivi d'un save() séparés.
 async function deleteTask(id, userId) {
+  const updated = await taskRepository.softDelete(id, userId);
+  if (updated) return;
+
   const task = await taskRepository.findByIdAny(id);
   if (!task || String(task.creator) !== String(userId)) {
     throw new NotFoundError('Tâche introuvable');
   }
-  if (task.isDeleted) {
-    throw new ConflictError('Cette tâche a déjà été supprimée');
-  }
-
-  task.isDeleted = true;
-  task.deletedAt = new Date();
-  task.deletedBy = userId;
-  task.history.unshift({ actor: userId, action: 'deleted', detail: 'Tâche supprimée' });
-  await task.save();
+  throw new ConflictError('Cette tâche a déjà été supprimée');
 }
 
 async function restoreTask(id, userId) {
+  const updated = await taskRepository.restore(id, userId);
+  if (updated) return updated;
+
   const task = await taskRepository.findByIdAny(id);
   if (!task || String(task.creator) !== String(userId)) {
     throw new NotFoundError('Tâche introuvable');
   }
-  if (!task.isDeleted) {
-    throw new ConflictError("Cette tâche n'est pas supprimée");
-  }
-
-  task.isDeleted = false;
-  task.deletedAt = null;
-  task.deletedBy = null;
-  task.history.unshift({ actor: userId, action: 'restored', detail: 'Tâche restaurée' });
-  await task.save();
-  return task;
+  throw new ConflictError("Cette tâche n'est pas supprimée");
 }
 
 async function addComment(id, userId, content) {

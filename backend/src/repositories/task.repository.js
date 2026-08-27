@@ -25,4 +25,35 @@ function findByIdAny(id) {
   return Task.findById(id);
 }
 
-module.exports = { create, findMany, count, findById, findByIdAny };
+// Mise à jour atomique (findOneAndUpdate) : la condition `isDeleted: false`
+// fait partie du filtre, pas d'un check préalable en mémoire, ce qui évite
+// la fenêtre de course d'un « find » suivi d'un « save » (deux suppressions
+// concurrentes ne peuvent plus toutes les deux réussir).
+function softDelete(id, userId) {
+  return Task.findOneAndUpdate(
+    { _id: id, creator: userId, isDeleted: false },
+    {
+      $set: { isDeleted: true, deletedAt: new Date(), deletedBy: userId },
+      $push: {
+        history: { $each: [{ actor: userId, action: 'deleted', detail: 'Tâche supprimée' }], $position: 0 },
+      },
+    },
+    { returnDocument: 'after' }
+  );
+}
+
+// Symétrique de softDelete, même garantie d'atomicité.
+function restore(id, userId) {
+  return Task.findOneAndUpdate(
+    { _id: id, creator: userId, isDeleted: true },
+    {
+      $set: { isDeleted: false, deletedAt: null, deletedBy: null },
+      $push: {
+        history: { $each: [{ actor: userId, action: 'restored', detail: 'Tâche restaurée' }], $position: 0 },
+      },
+    },
+    { returnDocument: 'after' }
+  );
+}
+
+module.exports = { create, findMany, count, findById, findByIdAny, softDelete, restore };
