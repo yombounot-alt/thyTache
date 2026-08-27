@@ -39,6 +39,7 @@ Variables principales :
 | `BCRYPT_SALT_ROUNDS` | Coût du hashage bcrypt |
 | `JSON_BODY_LIMIT` | Taille maximale du corps des requêtes JSON |
 | `LOG_LEVEL` | Niveau de log (winston) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` / `MAIL_FROM` | Envoi réel des e-mails (OTP, notifications, résumé hebdo). Si `SMTP_HOST` est vide, aucun e-mail n'est envoyé : les OTP sont loggés côté serveur (dev uniquement) et les autres e-mails sont silencieusement ignorés. |
 
 En production, `JWT_SECRET`, `JWT_REFRESH_SECRET` et `COOKIE_SECRET` sont obligatoires (validation au démarrage).
 
@@ -90,19 +91,20 @@ npm run format:check  # vérifie le formatage sans modifier les fichiers
 ```
 backend/
 ├── src/
-│   ├── config/         # configuration (env, logger, cors, swagger)
+│   ├── config/         # configuration (env, logger, cors, swagger, upload, scheduler)
 │   ├── controllers/    # contrôleurs HTTP (légers, délèguent aux services)
 │   ├── routes/         # définition des routes Express + doc Swagger
-│   ├── services/       # logique métier (à peupler avec les futurs modules)
-│   ├── models/         # modèles de données (à peupler avec une base de données)
+│   ├── services/       # logique métier
+│   ├── models/         # modèles Mongoose
 │   ├── repositories/   # accès aux données (couche d'abstraction DB)
 │   ├── middlewares/    # sécurité, erreurs, authentification, sanitization
 │   ├── validators/     # règles de validation (express-validator)
+│   ├── jobs/           # tâches planifiées (node-cron) : retards, résumé hebdo
 │   ├── utils/          # utilitaires (réponses API, JWT, bcrypt, catchAsync)
 │   ├── constants/       # constantes partagées (codes HTTP, etc.)
 │   ├── errors/          # classes d'erreurs personnalisées
 │   ├── app.js           # configuration de l'application Express
-│   └── server.js        # point d'entrée, démarrage du serveur HTTP
+│   └── server.js        # point d'entrée, démarrage du serveur HTTP + planificateur
 ├── tests/
 │   ├── unit/
 │   └── integration/
@@ -151,13 +153,15 @@ Les erreurs métier doivent utiliser les classes de `src/errors/` (`BadRequestEr
 ## Modules implémentés
 
 - **Auth** : register (OTP e-mail), verify-email, login, refresh token (rotation + cookie httpOnly), logout, forgot/reset password, change password
-- **Tasks** : CRUD, commentaires, pièces jointes (métadonnées uniquement), stats, évolution, répartition par statut/assigné, activité récente
-- **Users** (admin) : CRUD, activation/désactivation, changement de rôle (member/manager/admin), reset password
-- **Notifications** : générées automatiquement par le backend sur les événements de tâches (création, passage à "done") ; lecture/marquage lu par l'utilisateur propriétaire uniquement
+- **Tasks** : CRUD, suppression logique (corbeille, restauration), commentaires, pièces jointes (métadonnées uniquement), stats/évolution/répartition/activité — avec `scope=all` réservé aux admins pour une vue plateforme entière
+- **RBAC admin** : un admin peut voir toutes les tâches (`scope=all`), en créer et en attribuer à n'importe quel utilisateur ; ses droits de lecture élargis ne donnent pas de passe-droit en écriture (modifier/supprimer restent réservés au créateur/assigné)
+- **Users** : CRUD (admin), un utilisateur peut modifier son propre profil (nom, téléphone, email, avatar) sans être admin, activation/désactivation, changement de rôle (member/manager/admin), reset password, upload d'avatar réel (`POST /users/me/avatar`, stockage disque local, 2 Mo max, jpeg/png/webp)
+- **Notifications** : générées sur les événements de tâches (création, complétion, attribution, retard) et respectent les préférences utilisateur (`pushNotifications` pour la notification in-app, `emailNotifications` pour la copie e-mail)
+- **Planificateur** (`src/jobs/`, node-cron, jamais actif pendant les tests) : détection quotidienne des tâches en retard, résumé hebdomadaire par e-mail (préférence `weeklyDigest`)
 
 ## Points restant à configurer
 
-- **SMTP réel** : `SMTP_HOST`/`SMTP_USER`/`SMTP_PASSWORD` sont vides dans `.env` — en dev, les OTP sont uniquement loggés côté serveur (jamais envoyés). Obligatoire avant mise en production (`email.service.js` lève une erreur bloquante si absent en production).
-- **Upload de fichiers réel** pour les pièces jointes (actuellement métadonnées uniquement, pas de stockage)
-- **CI/CD** (exécution automatique de lint/test au push) — nécessite d'abord d'initialiser un dépôt Git
-- Tests d'intégration : auth, tasks, users et notifications sont couverts (voir `tests/integration/`) ; à étendre si de nouveaux modules apparaissent
+- **SMTP réel** : si `SMTP_HOST` est vide, les OTP sont uniquement loggés côté serveur (dev uniquement) et les autres e-mails (notifications, résumé hebdo) sont silencieusement ignorés. Obligatoire avant mise en production (`email.service.js` lève une erreur bloquante si absent en production).
+- **Upload de fichiers réel** pour les pièces jointes des tâches (actuellement métadonnées uniquement, contrairement à l'avatar utilisateur qui stocke un vrai fichier)
+- **Agrégations stats** (`getStats`, `getEvolution`, etc.) chargent la collection en mémoire plutôt que d'utiliser un pipeline d'agrégation Mongo — suffisant au volume actuel, à revoir si le nombre de tâches devient important
+- **CI/CD** : lint + test au push sont automatisés (GitHub Actions), mais il n'y a pas d'étape de déploiement (pas d'environnement cible configuré)

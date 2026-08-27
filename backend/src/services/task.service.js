@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const taskRepository = require('../repositories/task.repository');
 const userRepository = require('../repositories/user.repository');
 const notificationService = require('./notification.service');
@@ -8,8 +9,13 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// ObjectId réel (pas la chaîne `user.id`) : indispensable pour les pipelines
+// d'agrégation (getStats/getEvolution/...), qui — contrairement à
+// `.find()`/`.countDocuments()` — ne convertissent jamais automatiquement une
+// chaîne en ObjectId. Une chaîne brute y matcherait silencieusement zéro document.
 function scopeFilter(userId) {
-  return { $or: [{ creator: userId }, { assignee: userId }] };
+  const id = new mongoose.Types.ObjectId(userId);
+  return { $or: [{ creator: id }, { assignee: id }] };
 }
 
 // Centralise la même règle que pour la liste : un admin qui demande
@@ -298,72 +304,58 @@ async function addAttachment(id, userId, { name, sizeKb, type }) {
 // tableaux de bord admin (AdminDashboard/AdminStatistics côté frontend)
 // d'afficher des chiffres à l'échelle de la plateforme plutôt que ceux du
 // seul admin connecté, sans dupliquer la logique d'autorisation.
+// Toutes délèguent le calcul à un pipeline d'agrégation Mongo (au lieu de
+// charger toute la collection en mémoire pour la filtrer côté Node), ce qui
+// compte particulièrement pour `scope=all`, potentiellement toute la plateforme.
 async function getStats(user, scope) {
-  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
-  const now = new Date();
-  return {
-    total: tasks.length,
-    completed: tasks.filter((t) => t.status === 'done').length,
-    inProgress: tasks.filter((t) => t.status === 'in_progress' || t.status === 'in_review').length,
-    pending: tasks.filter((t) => t.status === 'todo').length,
-    overdue: tasks.filter((t) => t.status !== 'done' && t.dueDate && t.dueDate < now).length,
-  };
+  return taskRepository.aggregateStats(resolveFilter(user, scope));
 }
 
 async function getEvolution(user, days = 14, scope) {
-  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const buckets = [];
+  const since = new Date(today.getTime() - (days - 1) * 24 * 3600_000);
 
+  const { created, completed } = await taskRepository.aggregateDailyCounts(resolveFilter(user, scope), since);
+  const createdByDay = new Map(created.map((row) => [row._id, row.count]));
+  const completedByDay = new Map(completed.map((row) => [row._id, row.count]));
+
+  const buckets = [];
   for (let i = days - 1; i >= 0; i -= 1) {
     const day = new Date(today.getTime() - i * 24 * 3600_000);
     const dayLabel = day.toISOString().slice(0, 10);
-    const created = tasks.filter((t) => t.createdAt.toISOString().slice(0, 10) === dayLabel).length;
-    const completed = tasks.filter(
-      (t) => t.completedAt && t.completedAt.toISOString().slice(0, 10) === dayLabel
-    ).length;
-    buckets.push({ date: dayLabel, created, completed });
+    buckets.push({
+      date: dayLabel,
+      created: createdByDay.get(dayLabel) ?? 0,
+      completed: completedByDay.get(dayLabel) ?? 0,
+    });
   }
 
   return buckets;
 }
 
 async function getStatusDistribution(user, scope) {
-  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
-  return TASK_STATUSES.map((status) => ({
-    status,
-    count: tasks.filter((t) => t.status === status).length,
-  }));
+  const rows = await taskRepository.aggregateStatusDistribution(resolveFilter(user, scope));
+  const countByStatus = new Map(rows.map((row) => [row._id, row.count]));
+  return TASK_STATUSES.map((status) => ({ status, count: countByStatus.get(status) ?? 0 }));
 }
 
 async function getAssigneeDistribution(user, scope) {
-  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
-  const counts = new Map();
-  tasks.forEach((t) => {
-    if (!t.assignee) return;
-    const key = String(t.assignee);
-    counts.set(key, (counts.get(key) || 0) + 1);
-  });
-  return Array.from(counts.entries()).map(([userId2, count]) => ({ userId: userId2, count }));
+  const rows = await taskRepository.aggregateAssigneeDistribution(resolveFilter(user, scope));
+  return rows.map((row) => ({ userId: String(row._id), count: row.count }));
 }
 
 async function getRecentActivity(user, limit = 8, scope) {
-  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
-  return tasks
-    .flatMap((t) =>
-      t.history.map((h) => ({
-        id: String(h._id),
-        taskId: String(t._id),
-        taskTitle: t.title,
-        actorId: String(h.actor),
-        action: h.action,
-        detail: h.detail,
-        createdAt: h.createdAt,
-      }))
-    )
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-    .slice(0, limit);
+  const rows = await taskRepository.aggregateRecentActivity(resolveFilter(user, scope), limit);
+  return rows.map((row) => ({
+    id: String(row.id),
+    taskId: String(row.taskId),
+    taskTitle: row.taskTitle,
+    actorId: String(row.actorId),
+    action: row.action,
+    detail: row.detail,
+    createdAt: row.createdAt,
+  }));
 }
 
 module.exports = {
