@@ -60,6 +60,9 @@ export interface TaskFilters {
   priority?: TaskPriority[]
   category?: TaskCategory[]
   assigneeId?: string
+  // Admin uniquement : "all" retourne les tâches de toute la plateforme.
+  // Ignoré côté backend pour un utilisateur standard (toujours "mine").
+  scope?: "all" | "mine"
 }
 
 export interface TaskStats {

@@ -21,6 +21,9 @@ export function TaskFormModal({ open, onOpenChange, task }: TaskFormModalProps) 
   const user = useAuthStore((s) => s.user)
   const { createTask, updateTask } = useTaskMutations()
   const isEditing = Boolean(task)
+  // Seul un admin peut attribuer une tâche à quelqu'un d'autre (droit vérifié
+  // côté backend dans les deux cas, cf. task.service.createTask/updateTask).
+  const isAdmin = user?.role === "admin"
 
   const handleSubmit = (values: TaskFormValues) => {
     if (!user) return
@@ -66,9 +69,8 @@ export function TaskFormModal({ open, onOpenChange, task }: TaskFormModalProps) 
           onSubmit={handleSubmit}
           isSubmitting={createTask.isPending || updateTask.isPending}
           submitLabel={isEditing ? "Enregistrer les modifications" : "Créer la tâche"}
-          // La règle "auto-assignation uniquement" s'applique aussi bien à la
-          // création qu'à la modification côté backend.
-          restrictAssigneeToSelf={user ?? undefined}
+          currentUser={user ?? undefined}
+          canAssignOthers={isAdmin}
         />
       </DialogContent>
     </Dialog>

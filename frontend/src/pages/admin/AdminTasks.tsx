@@ -4,6 +4,7 @@ import { PlusIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FilterBar } from "@/components/shared/FilterBar"
 import { Pagination } from "@/components/shared/Pagination"
 import { TasksTable } from "@/components/tables/TasksTable"
@@ -12,6 +13,7 @@ import { TaskFormModal } from "@/components/modals/TaskFormModal"
 import { useTaskFilters } from "@/hooks/useTaskFilters"
 import { useTasksQuery } from "@/hooks/useTasks"
 import { useAllUsersQuery } from "@/hooks/useUsers"
+import type { TaskFilters } from "@/types/task"
 
 export default function AdminTasks() {
   const {
@@ -27,14 +29,20 @@ export default function AdminTasks() {
     setPage,
     filters,
   } = useTaskFilters()
+  const [scope, setScope] = useState<NonNullable<TaskFilters["scope"]>>("all")
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { data, isLoading } = useTasksQuery({ ...filters, page, pageSize: 8, sortBy, sortDir })
+  const { data, isLoading } = useTasksQuery({ ...filters, scope, page, pageSize: 8, sortBy, sortDir })
   const { data: users } = useAllUsersQuery()
   const usersById = new Map((users ?? []).map((u) => [u.id, u]))
+
+  const handleScopeChange = (value: string) => {
+    setScope(value as NonNullable<TaskFilters["scope"]>)
+    setPage(1)
+  }
 
   const handleSortChange = (column: string) => {
     if (sortBy === column) {
@@ -58,6 +66,13 @@ export default function AdminTasks() {
           <PlusIcon /> Nouvelle tâche
         </Button>
       </div>
+
+      <Tabs value={scope} onValueChange={handleScopeChange}>
+        <TabsList>
+          <TabsTrigger value="all">Toutes les tâches</TabsTrigger>
+          <TabsTrigger value="mine">Mes tâches</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       <FilterBar
         search={search}
@@ -91,6 +106,7 @@ export default function AdminTasks() {
                 sortBy={sortBy}
                 sortDir={sortDir}
                 onSortChange={handleSortChange}
+                showCreator={scope === "all"}
               />
               <Pagination meta={data.meta} onPageChange={setPage} />
             </>

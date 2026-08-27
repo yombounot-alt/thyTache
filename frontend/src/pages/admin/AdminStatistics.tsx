@@ -12,9 +12,10 @@ import {
 import { useAllUsersQuery } from "@/hooks/useUsers"
 
 export default function AdminStatistics() {
-  const { data: distribution, isLoading: distributionLoading } = useStatusDistribution()
-  const { data: perUser, isLoading: perUserLoading } = useTasksPerUser()
-  const { data: evolution, isLoading: evolutionLoading } = useTaskEvolution(30)
+  // scope="all" : statistiques à l'échelle de la plateforme (cf. AdminDashboard).
+  const { data: distribution, isLoading: distributionLoading } = useStatusDistribution("all")
+  const { data: perUser, isLoading: perUserLoading } = useTasksPerUser("all")
+  const { data: evolution, isLoading: evolutionLoading } = useTaskEvolution(30, "all")
   const { data: users } = useAllUsersQuery()
 
   const usersById = new Map((users ?? []).map((u) => [u.id, u]))

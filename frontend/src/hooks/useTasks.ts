@@ -1,11 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { taskService, type TaskQueryParams } from "@/services/taskService"
-import type { Task } from "@/types/task"
+import type { Task, TaskFilters } from "@/types/task"
 
 export const tasksKey = (params?: TaskQueryParams) => ["tasks", params] as const
 export const taskKey = (id: string) => ["tasks", "detail", id] as const
-export const taskStatsKey = ["tasks", "stats"] as const
+export const taskStatsKey = (scope?: TaskFilters["scope"]) => ["tasks", "stats", scope] as const
 export const allTasksKey = (filters?: object) => ["tasks", "all", filters] as const
 
 export function useTasksQuery(params: TaskQueryParams = {}) {
@@ -30,38 +30,38 @@ export function useTaskQuery(id: string | undefined) {
   })
 }
 
-export function useTaskStats() {
+export function useTaskStats(scope?: TaskFilters["scope"]) {
   return useQuery({
-    queryKey: taskStatsKey,
-    queryFn: () => taskService.getStats(),
+    queryKey: taskStatsKey(scope),
+    queryFn: () => taskService.getStats(scope),
   })
 }
 
-export function useTaskEvolution(days = 14) {
+export function useTaskEvolution(days = 14, scope?: TaskFilters["scope"]) {
   return useQuery({
-    queryKey: ["tasks", "evolution", days],
-    queryFn: () => taskService.getEvolution(days),
+    queryKey: ["tasks", "evolution", days, scope],
+    queryFn: () => taskService.getEvolution(days, scope),
   })
 }
 
-export function useStatusDistribution() {
+export function useStatusDistribution(scope?: TaskFilters["scope"]) {
   return useQuery({
-    queryKey: ["tasks", "status-distribution"],
-    queryFn: () => taskService.getStatusDistribution(),
+    queryKey: ["tasks", "status-distribution", scope],
+    queryFn: () => taskService.getStatusDistribution(scope),
   })
 }
 
-export function useTasksPerUser() {
+export function useTasksPerUser(scope?: TaskFilters["scope"]) {
   return useQuery({
-    queryKey: ["tasks", "per-user"],
-    queryFn: () => taskService.getTasksPerUser(),
+    queryKey: ["tasks", "per-user", scope],
+    queryFn: () => taskService.getTasksPerUser(scope),
   })
 }
 
-export function useRecentActivity(limit = 8) {
+export function useRecentActivity(limit = 8, scope?: TaskFilters["scope"]) {
   return useQuery({
-    queryKey: ["tasks", "activity", limit],
-    queryFn: () => taskService.getRecentActivity(limit),
+    queryKey: ["tasks", "activity", limit, scope],
+    queryFn: () => taskService.getRecentActivity(limit, scope),
   })
 }
 

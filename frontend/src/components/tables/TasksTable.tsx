@@ -28,6 +28,10 @@ interface TasksTableProps {
   sortBy: string
   sortDir: "asc" | "desc"
   onSortChange: (column: string) => void
+  // Vue admin "Toutes les tâches" : le créateur varie d'une tâche à l'autre,
+  // il faut donc l'identifier clairement (contrairement à "Mes tâches", où
+  // le créateur est toujours l'utilisateur connecté).
+  showCreator?: boolean
 }
 
 function SortableHead({
@@ -59,7 +63,15 @@ function SortableHead({
   )
 }
 
-export function TasksTable({ tasks, usersById, onRowClick, sortBy, sortDir, onSortChange }: TasksTableProps) {
+export function TasksTable({
+  tasks,
+  usersById,
+  onRowClick,
+  sortBy,
+  sortDir,
+  onSortChange,
+  showCreator,
+}: TasksTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -67,6 +79,7 @@ export function TasksTable({ tasks, usersById, onRowClick, sortBy, sortDir, onSo
           <SortableHead column="title" label="Tâche" sortBy={sortBy} sortDir={sortDir} onSortChange={onSortChange} />
           <SortableHead column="status" label="Statut" sortBy={sortBy} sortDir={sortDir} onSortChange={onSortChange} />
           <SortableHead column="priority" label="Priorité" sortBy={sortBy} sortDir={sortDir} onSortChange={onSortChange} />
+          {showCreator && <TableHead>Créateur</TableHead>}
           <TableHead>Assigné à</TableHead>
           <SortableHead column="dueDate" label="Échéance" sortBy={sortBy} sortDir={sortDir} onSortChange={onSortChange} />
         </TableRow>
@@ -74,6 +87,7 @@ export function TasksTable({ tasks, usersById, onRowClick, sortBy, sortDir, onSo
       <TableBody>
         {tasks.map((task) => {
           const assignee = task.assigneeId ? usersById.get(task.assigneeId) : undefined
+          const creator = usersById.get(task.creatorId)
           const overdue = task.status !== "done" && isOverdue(task.dueDate)
 
           return (
@@ -88,6 +102,22 @@ export function TasksTable({ tasks, usersById, onRowClick, sortBy, sortDir, onSo
               <TableCell>
                 <Badge className={TASK_PRIORITY_COLORS[task.priority]}>{TASK_PRIORITY_LABELS[task.priority]}</Badge>
               </TableCell>
+              {showCreator && (
+                <TableCell>
+                  {creator ? (
+                    <div className="flex items-center gap-1.5">
+                      <Avatar className="size-6">
+                        <AvatarFallback className="text-[10px]">
+                          {initials(creator.firstName, creator.lastName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-sm">{creator.firstName}</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell>
                 {assignee ? (
                   <div className="flex items-center gap-1.5">

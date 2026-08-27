@@ -167,7 +167,7 @@ export const taskService = {
     try {
       await api.delete(`/tasks/${id}`)
     } catch (error) {
-      throw toApiError(error, "Échec de la suppression de la tâche")
+      throw toApiError(error, "Impossible de supprimer cette tâche.")
     }
   },
 
@@ -193,47 +193,55 @@ export const taskService = {
     }
   },
 
-  async getEvolution(days = 14): Promise<Array<{ date: string; created: number; completed: number }>> {
+  async getEvolution(
+    days = 14,
+    scope?: TaskFilters["scope"]
+  ): Promise<Array<{ date: string; created: number; completed: number }>> {
     try {
-      const { data } = await api.get("/tasks/evolution", { params: { days } })
+      const { data } = await api.get("/tasks/evolution", { params: { days, scope } })
       return data.data
     } catch (error) {
       throw toApiError(error, "Échec du chargement de l'évolution des tâches")
     }
   },
 
-  async getRecentActivity(limit = 8): Promise<
+  async getRecentActivity(
+    limit = 8,
+    scope?: TaskFilters["scope"]
+  ): Promise<
     Array<{ id: string; taskId: string; taskTitle: string; actorId: string; action: string; detail?: string; createdAt: string }>
   > {
     try {
-      const { data } = await api.get("/tasks/activity", { params: { limit } })
+      const { data } = await api.get("/tasks/activity", { params: { limit, scope } })
       return data.data
     } catch (error) {
       throw toApiError(error, "Échec du chargement de l'activité récente")
     }
   },
 
-  async getStatusDistribution(): Promise<Array<{ status: Task["status"]; count: number }>> {
+  async getStatusDistribution(
+    scope?: TaskFilters["scope"]
+  ): Promise<Array<{ status: Task["status"]; count: number }>> {
     try {
-      const { data } = await api.get("/tasks/status-distribution")
+      const { data } = await api.get("/tasks/status-distribution", { params: { scope } })
       return data.data
     } catch (error) {
       throw toApiError(error, "Échec du chargement de la répartition par statut")
     }
   },
 
-  async getTasksPerUser(): Promise<Array<{ userId: string; count: number }>> {
+  async getTasksPerUser(scope?: TaskFilters["scope"]): Promise<Array<{ userId: string; count: number }>> {
     try {
-      const { data } = await api.get("/tasks/assignees-distribution")
+      const { data } = await api.get("/tasks/assignees-distribution", { params: { scope } })
       return data.data
     } catch (error) {
       throw toApiError(error, "Échec du chargement de la répartition par assigné")
     }
   },
 
-  async getStats(): Promise<TaskStats> {
+  async getStats(scope?: TaskFilters["scope"]): Promise<TaskStats> {
     try {
-      const { data } = await api.get("/tasks/stats")
+      const { data } = await api.get("/tasks/stats", { params: { scope } })
       return data.data
     } catch (error) {
       throw toApiError(error, "Échec du chargement des statistiques")

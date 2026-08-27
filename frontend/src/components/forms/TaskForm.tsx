@@ -2,12 +2,21 @@ import { useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Controller, useForm } from "react-hook-form"
 import { z } from "zod"
-import { CalendarIcon, LoaderCircleIcon, PlusIcon, XIcon } from "lucide-react"
+import { CalendarIcon, CheckIcon, ChevronsUpDownIcon, LoaderCircleIcon, PlusIcon, XIcon } from "lucide-react"
 import { format, parseISO } from "date-fns"
 import { fr } from "date-fns/locale"
 
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -20,6 +29,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { initials } from "@/lib/format"
 import { useAllUsersQuery } from "@/hooks/useUsers"
 import {
   TASK_CATEGORY_LABELS,
@@ -44,10 +54,12 @@ interface TaskFormProps {
   onSubmit: (values: TaskFormValues) => void
   isSubmitting?: boolean
   submitLabel?: string
-  // L'API de création (POST /tasks) n'autorise à assigner la tâche qu'à
-  // soi-même : en mode création, on limite donc les options du sélecteur au
-  // lieu de laisser choisir un collègue et échouer en 403 à la soumission.
-  restrictAssigneeToSelf?: { id: string; firstName: string; lastName: string }
+  // Utilisateur connecté, pour proposer "Moi-même" dans le sélecteur d'assigné.
+  currentUser?: { id: string; firstName: string; lastName: string }
+  // Seul un admin peut attribuer une tâche à un autre utilisateur que
+  // lui-même (droit vérifié côté backend) : pour tout le monde d'autre,
+  // le sélecteur reste limité à "Non assigné" / "Moi-même".
+  canAssignOthers?: boolean
 }
 
 export function TaskForm({
@@ -55,10 +67,18 @@ export function TaskForm({
   onSubmit,
   isSubmitting,
   submitLabel = "Créer la tâche",
-  restrictAssigneeToSelf,
+  currentUser,
+  canAssignOthers = false,
 }: TaskFormProps) {
   const { data: users } = useAllUsersQuery()
   const [tagInput, setTagInput] = useState("")
+  const [assigneeMode, setAssigneeMode] = useState<"unassigned" | "self" | "other">(() => {
+    const initial = defaultValues?.assigneeId
+    if (!initial) return "unassigned"
+    if (currentUser && initial === currentUser.id) return "self"
+    return "other"
+  })
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false)
 
   const {
     register,
@@ -90,6 +110,33 @@ export function TaskForm({
     }
     setTagInput("")
   }
+
+  const dueDateField = (
+    <div className="space-y-1.5">
+      <Label>Date limite</Label>
+      <Controller
+        name="dueDate"
+        control={control}
+        render={({ field }) => (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-start font-normal">
+                <CalendarIcon className="size-4" />
+                {field.value ? format(parseISO(field.value), "d MMM yyyy", { locale: fr }) : "Choisir une date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={field.value ? parseISO(field.value) : undefined}
+                onSelect={(date) => field.onChange(date ? date.toISOString() : null)}
+              />
+            </PopoverContent>
+          </Popover>
+        )}
+      />
+    </div>
+  )
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
@@ -152,64 +199,148 @@ export function TaskForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label>Assigné à</Label>
-          <Controller
-            name="assigneeId"
-            control={control}
-            render={({ field }) => (
-              <Select
-                value={field.value ?? "unassigned"}
-                onValueChange={(v) => field.onChange(v === "unassigned" ? null : v)}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Non assigné" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">Non assigné</SelectItem>
-                  {restrictAssigneeToSelf ? (
-                    <SelectItem value={restrictAssigneeToSelf.id}>
-                      Moi-même ({restrictAssigneeToSelf.firstName} {restrictAssigneeToSelf.lastName})
-                    </SelectItem>
-                  ) : (
-                    users?.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.firstName} {u.lastName}
+      {!canAssignOthers ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Assigné à</Label>
+            <Controller
+              name="assigneeId"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "unassigned"}
+                  onValueChange={(v) => field.onChange(v === "unassigned" ? null : v)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Non assigné" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Non assigné</SelectItem>
+                    {currentUser && (
+                      <SelectItem value={currentUser.id}>
+                        Moi-même ({currentUser.firstName} {currentUser.lastName})
                       </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-            )}
-          />
+                    )}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
+          {dueDateField}
         </div>
+      ) : (
+        <>
+          <div className="space-y-1.5">
+            <Label>Assigné à</Label>
+            <Controller
+              name="assigneeId"
+              control={control}
+              render={({ field }) => {
+                  const selectedUser = field.value ? users?.find((u) => u.id === field.value) : undefined
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={assigneeMode === "unassigned" ? "default" : "outline"}
+                          onClick={() => {
+                            setAssigneeMode("unassigned")
+                            field.onChange(null)
+                          }}
+                        >
+                          Non assigné
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={assigneeMode === "self" ? "default" : "outline"}
+                          onClick={() => {
+                            setAssigneeMode("self")
+                            field.onChange(currentUser?.id ?? null)
+                          }}
+                        >
+                          Moi-même
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={assigneeMode === "other" ? "default" : "outline"}
+                          onClick={() => {
+                            setAssigneeMode("other")
+                            setAssigneePickerOpen(true)
+                          }}
+                        >
+                          Attribuer à un utilisateur
+                        </Button>
+                      </div>
 
-        <div className="space-y-1.5">
-          <Label>Date limite</Label>
-          <Controller
-            name="dueDate"
-            control={control}
-            render={({ field }) => (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="w-full justify-start font-normal">
-                    <CalendarIcon className="size-4" />
-                    {field.value ? format(parseISO(field.value), "d MMM yyyy", { locale: fr }) : "Choisir une date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={field.value ? parseISO(field.value) : undefined}
-                    onSelect={(date) => field.onChange(date ? date.toISOString() : null)}
-                  />
-                </PopoverContent>
-              </Popover>
-            )}
-          />
-        </div>
-      </div>
+                      {assigneeMode === "other" && (
+                        <Popover open={assigneePickerOpen} onOpenChange={setAssigneePickerOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="w-full justify-between font-normal"
+                            >
+                              {selectedUser ? (
+                                <span className="flex items-center gap-2">
+                                  <Avatar className="size-5">
+                                    <AvatarFallback className="text-[10px]">
+                                      {initials(selectedUser.firstName, selectedUser.lastName)}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  {selectedUser.firstName} {selectedUser.lastName}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">Choisir un utilisateur...</span>
+                              )}
+                              <ChevronsUpDownIcon className="size-4 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-80 p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Rechercher par nom ou e-mail..." />
+                              <CommandList>
+                                <CommandEmpty>Aucun utilisateur trouvé.</CommandEmpty>
+                                <CommandGroup>
+                                  {users?.map((u) => (
+                                    <CommandItem
+                                      key={u.id}
+                                      value={`${u.firstName} ${u.lastName} ${u.email}`}
+                                      onSelect={() => {
+                                        field.onChange(u.id)
+                                        setAssigneePickerOpen(false)
+                                      }}
+                                    >
+                                      <Avatar className="size-6">
+                                        <AvatarFallback className="text-[10px]">
+                                          {initials(u.firstName, u.lastName)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span className="flex min-w-0 flex-col">
+                                        <span className="truncate text-sm">
+                                          {u.firstName} {u.lastName}
+                                        </span>
+                                        <span className="truncate text-xs text-muted-foreground">{u.email}</span>
+                                      </span>
+                                      {field.value === u.id && <CheckIcon className="ml-auto size-4 shrink-0" />}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+                    </div>
+                  )
+                }}
+              />
+            </div>
+          {dueDateField}
+        </>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="tag-input">Étiquettes</Label>

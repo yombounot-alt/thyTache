@@ -10,10 +10,12 @@ import { useAllUsersQuery } from "@/hooks/useUsers"
 import { TASK_STATUS_LABELS } from "@/utils/constants"
 
 export default function AdminDashboard() {
-  const { data: stats, isLoading: statsLoading } = useTaskStats()
+  // scope="all" : tableau de bord admin à l'échelle de la plateforme, pas
+  // seulement les tâches du compte admin connecté (cf. task.service.resolveFilter).
+  const { data: stats, isLoading: statsLoading } = useTaskStats("all")
   const { data: users, isLoading: usersLoading } = useAllUsersQuery()
-  const { data: distribution, isLoading: distributionLoading } = useStatusDistribution()
-  const { data: evolution, isLoading: evolutionLoading } = useTaskEvolution(14)
+  const { data: distribution, isLoading: distributionLoading } = useStatusDistribution("all")
+  const { data: evolution, isLoading: evolutionLoading } = useTaskEvolution(14, "all")
 
   const activeToday = (users ?? []).filter(
     (u) => u.lastActiveAt && Date.now() - new Date(u.lastActiveAt).getTime() < 24 * 3600_000

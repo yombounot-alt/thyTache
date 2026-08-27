@@ -68,6 +68,13 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
   const creator = usersById.get(task.creatorId)
   const overdue = task.status !== "done" && isOverdue(task.dueDate)
 
+  // Un admin peut désormais consulter n'importe quelle tâche (RBAC), mais le
+  // backend ne lui accorde pas de passe-droit en écriture pour autant : ces
+  // actions restent réservées au créateur/assigné, exactement comme pour un
+  // utilisateur standard (cf. task.service.findAccessibleTask côté backend).
+  const canModify = task.creatorId === user.id || task.assigneeId === user.id
+  const canDelete = task.creatorId === user.id
+
   const handleStatusChange = (status: TaskStatus) => {
     updateTask.mutate(
       { id: task.id, patch: { status }, actorId: user.id },
@@ -119,12 +126,12 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
   const handleDelete = () => {
     deleteTask.mutate(task.id, {
       onSuccess: () => {
-        toast.success("Tâche supprimée.")
+        toast.success("Tâche supprimée avec succès.")
         setDeleteOpen(false)
         onOpenChange(false)
       },
       onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Échec de la suppression de la tâche")
+        toast.error(error instanceof Error ? error.message : "Impossible de supprimer cette tâche.")
       },
     })
   }
@@ -184,40 +191,49 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Select value={task.status} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
-                <SelectTrigger size="sm" className="w-44">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((key) => (
-                    <SelectItem key={key} value={key}>
-                      {TASK_STATUS_LABELS[key]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {canModify && (
+              <div className="flex flex-wrap items-center gap-3">
+                <Select value={task.status} onValueChange={(v) => handleStatusChange(v as TaskStatus)}>
+                  <SelectTrigger size="sm" className="w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(TASK_STATUS_LABELS) as TaskStatus[]).map((key) => (
+                      <SelectItem key={key} value={key}>
+                        {TASK_STATUS_LABELS[key]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
 
-              {task.status !== "done" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => handleStatusChange("done")}
-                  className="gap-1.5"
-                >
-                  <CheckCircle2Icon className="size-4" /> Marquer comme terminée
-                </Button>
-              )}
+                {task.status !== "done" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleStatusChange("done")}
+                    className="gap-1.5"
+                  >
+                    <CheckCircle2Icon className="size-4" /> Marquer comme terminée
+                  </Button>
+                )}
 
-              <div className="ml-auto flex items-center gap-1.5">
-                <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
-                  <PencilIcon /> Modifier
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
-                  <Trash2Icon /> Supprimer
-                </Button>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <Button size="sm" variant="ghost" onClick={() => setEditOpen(true)}>
+                    <PencilIcon /> Modifier
+                  </Button>
+                  {canDelete && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDeleteOpen(true)}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2Icon /> Supprimer
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             <Tabs defaultValue="comments">
               <TabsList>
@@ -253,18 +269,20 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
                     )
                   })}
                 </div>
-                <div className="flex gap-2">
-                  <Textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Ajouter un commentaire..."
-                    rows={2}
-                    className="flex-1"
-                  />
-                  <Button size="icon" onClick={handleAddComment} disabled={addComment.isPending}>
-                    <SendIcon />
-                  </Button>
-                </div>
+                {canModify && (
+                  <div className="flex gap-2">
+                    <Textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Ajouter un commentaire..."
+                      rows={2}
+                      className="flex-1"
+                    />
+                    <Button size="icon" onClick={handleAddComment} disabled={addComment.isPending}>
+                      <SendIcon />
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="attachments" className="space-y-3 pt-3">
@@ -288,10 +306,14 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
                     ))}
                   </div>
                 )}
-                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFilePicked} />
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                  <UploadIcon /> Ajouter une pièce jointe
-                </Button>
+                {canModify && (
+                  <>
+                    <input ref={fileInputRef} type="file" className="hidden" onChange={handleFilePicked} />
+                    <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                      <UploadIcon /> Ajouter une pièce jointe
+                    </Button>
+                  </>
+                )}
               </TabsContent>
 
               <TabsContent value="history" className="pt-3">
@@ -325,7 +347,7 @@ export function TaskDetailModal({ taskId, onOpenChange }: TaskDetailModalProps) 
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Supprimer cette tâche ?"
-        description="Cette action est irréversible. La tâche et son historique seront définitivement supprimés."
+        description="Cette tâche ne sera plus visible dans votre liste."
         onConfirm={handleDelete}
         isLoading={deleteTask.isPending}
       />
