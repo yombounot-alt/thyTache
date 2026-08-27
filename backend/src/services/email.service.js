@@ -87,4 +87,25 @@ async function sendOtpEmail(to, code, { purpose }) {
   await sendMail({ to, subject, text, html });
 }
 
-module.exports = { sendMail, sendOtpEmail, isSmtpConfigured };
+function buildNotificationEmail({ title, message }) {
+  const subject = `${env.appName} — ${title}`;
+  const text = [message, `Connectez-vous à ${env.appName} pour voir les détails.`].join('\n\n');
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>${env.appName}</h2>
+      <p style="font-size: 16px; font-weight: 600;">${title}</p>
+      <p>${message}</p>
+      <p style="color: #888; font-size: 13px;">Connectez-vous à ${env.appName} pour voir les détails.</p>
+    </div>
+  `;
+  return { subject, text, html };
+}
+
+// Copie par e-mail d'une notification in-app, envoyée uniquement si
+// l'utilisateur a activé la préférence correspondante (cf. notification.service.notify).
+async function sendNotificationEmail(to, { title, message }) {
+  const { subject, text, html } = buildNotificationEmail({ title, message });
+  await sendMail({ to, subject, text, html });
+}
+
+module.exports = { sendMail, sendOtpEmail, sendNotificationEmail, isSmtpConfigured };

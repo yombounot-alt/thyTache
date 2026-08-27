@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../src/app');
 const { env } = require('../../src/config/env');
+const emailService = require('../../src/services/email.service');
 const { loginAs } = require('../helpers/factories');
 const { connectTestDB, clearTestDB, closeTestDB } = require('../helpers/db');
 
@@ -60,6 +61,49 @@ describe('Notifications générées par le cycle de vie des tâches', () => {
 
     const resB = await request(app).get(notifBase).set('Authorization', `Bearer ${tokenB}`);
     expect(resB.body.data).toHaveLength(0);
+  });
+});
+
+describe('Préférences de notification (push / e-mail)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("ne crée aucune notification in-app si pushNotifications est désactivé", async () => {
+    const { accessToken } = await loginAs({
+      email: 'notif-pref-push-off@example.com',
+      preferences: { pushNotifications: false, emailNotifications: false, darkMode: true, weeklyDigest: true },
+    });
+
+    await request(app).post(tasksBase).set('Authorization', `Bearer ${accessToken}`).send(taskPayload());
+
+    const res = await request(app).get(notifBase).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.body.data).toHaveLength(0);
+  });
+
+  it('envoie une copie e-mail quand emailNotifications est activé', async () => {
+    const spy = jest.spyOn(emailService, 'sendNotificationEmail').mockResolvedValue();
+    const { accessToken } = await loginAs({
+      email: 'notif-pref-email-on@example.com',
+      preferences: { pushNotifications: true, emailNotifications: true, darkMode: true, weeklyDigest: true },
+    });
+
+    await request(app).post(tasksBase).set('Authorization', `Bearer ${accessToken}`).send(taskPayload());
+
+    expect(spy).toHaveBeenCalledWith(
+      'notif-pref-email-on@example.com',
+      expect.objectContaining({ title: expect.any(String), message: expect.any(String) })
+    );
+  });
+
+  it("n'envoie aucun e-mail quand emailNotifications est désactivé", async () => {
+    const spy = jest.spyOn(emailService, 'sendNotificationEmail').mockResolvedValue();
+    const { accessToken } = await loginAs({
+      email: 'notif-pref-email-off@example.com',
+      preferences: { pushNotifications: true, emailNotifications: false, darkMode: true, weeklyDigest: true },
+    });
+
+    await request(app).post(tasksBase).set('Authorization', `Bearer ${accessToken}`).send(taskPayload());
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 
