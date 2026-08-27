@@ -60,6 +60,59 @@ describe('POST /users (admin uniquement)', () => {
   });
 });
 
+describe('PATCH /users/:id (profil)', () => {
+  it('permet à un utilisateur standard de modifier son propre profil', async () => {
+    const { accessToken, user } = await loginAs({ email: 'self-edit@example.com', role: 'member' });
+
+    const res = await request(app)
+      .patch(`${base}/${user.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ firstName: 'Nouveau prénom', phone: '+224620000000' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.firstName).toBe('Nouveau prénom');
+    expect(res.body.data.phone).toBe('+224620000000');
+  });
+
+  it("refuse à un utilisateur standard de modifier le profil d'un autre", async () => {
+    const { accessToken } = await loginAs({ email: 'self-edit-other@example.com', role: 'member' });
+    const { user: target } = await loginAs({ email: 'self-edit-target@example.com', role: 'member' });
+
+    const res = await request(app)
+      .patch(`${base}/${target.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ firstName: 'Piraté' });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("ignore silencieusement les champs sensibles (role, isActive) envoyés par l'utilisateur lui-même", async () => {
+    const { accessToken, user } = await loginAs({ email: 'self-edit-role@example.com', role: 'member' });
+
+    const res = await request(app)
+      .patch(`${base}/${user.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ firstName: 'Toujours membre', role: 'admin', isActive: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.role).toBe('member');
+    expect(res.body.data.isActive).toBe(true);
+  });
+
+  it("permet toujours à un admin de modifier le profil d'un autre utilisateur", async () => {
+    const { accessToken } = await loginAs({ email: 'admin-edit-other@example.com', role: 'admin' });
+    const { user: target } = await loginAs({ email: 'admin-edit-target@example.com', role: 'member' });
+
+    const res = await request(app)
+      .patch(`${base}/${target.id}`)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ firstName: 'Modifié par admin' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.firstName).toBe('Modifié par admin');
+  });
+});
+
 describe('PATCH /users/:id/role', () => {
   it('permet à un admin de promouvoir un utilisateur manager (régression : enum Mongoose)', async () => {
     const { accessToken } = await loginAs({ email: 'admin-role@example.com', role: 'admin' });

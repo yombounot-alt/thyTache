@@ -1,3 +1,4 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -50,6 +51,19 @@ app.use(globalLimiter);
 
 // Documentation Swagger / OpenAPI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Fichiers uploadés (avatars). Cross-Origin-Resource-Policy: cross-origin
+// nécessaire ici pour que le frontend (autre origine en dev) puisse charger
+// ces images dans une balise <img> — Helmet met "same-origin" par défaut,
+// ce qui bloquerait silencieusement l'affichage sinon.
+app.use(
+  '/uploads',
+  (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  },
+  express.static(path.join(__dirname, '..', 'uploads'))
+);
 
 // Routes applicatives versionnées
 app.use(env.apiPrefix, routes);

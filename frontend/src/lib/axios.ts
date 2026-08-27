@@ -9,8 +9,15 @@ import { useAuthStore } from "@/store/authStore"
  * le refresh token (posé par le backend sur /auth/login et /auth/refresh-token)
  * soit envoyé automatiquement par le navigateur.
  */
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api/v1"
+
+// Origine seule (sans /api/v1), pour résoudre les chemins relatifs renvoyés
+// par le backend (ex: avatarUrl = "/uploads/avatars/xxx.jpg") en URL absolue
+// affichable — le backend et le frontend ne partagent pas la même origine en dev.
+export const API_ORIGIN = new URL(API_BASE_URL).origin
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000/api/v1",
+  baseURL: API_BASE_URL,
   timeout: 15000,
   withCredentials: true,
 })

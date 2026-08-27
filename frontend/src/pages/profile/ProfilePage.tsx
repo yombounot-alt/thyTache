@@ -1,6 +1,6 @@
 import { useRef } from "react"
 import { useSearchParams } from "react-router-dom"
-import { CameraIcon } from "lucide-react"
+import { CameraIcon, LoaderCircleIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -21,7 +21,7 @@ export default function ProfilePage() {
   const [searchParams] = useSearchParams()
   const user = useAuthStore((s) => s.user)
   const updateAuthUser = useAuthStore((s) => s.updateUser)
-  const { updateUser } = useUserMutations()
+  const { updateUser, uploadAvatar } = useUserMutations()
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -32,17 +32,27 @@ export default function ProfilePage() {
 
   const handleAvatarPick: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0]
+    e.target.value = ""
     if (!file) return
-    const avatarUrl = URL.createObjectURL(file)
-    updateUser.mutate(
-      { id: user.id, patch: { avatarUrl } },
-      {
-        onSuccess: (updated) => {
-          updateAuthUser(updated)
-          toast.success("Photo de profil mise à jour.")
-        },
-      }
-    )
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      toast.error("Format d'image non supporté (jpeg, png ou webp uniquement).")
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image trop volumineuse (2 Mo maximum).")
+      return
+    }
+
+    uploadAvatar.mutate(file, {
+      onSuccess: (updated) => {
+        updateAuthUser(updated)
+        toast.success("Photo de profil mise à jour.")
+      },
+      onError: (error) => {
+        toast.error(error instanceof Error ? error.message : "Échec de l'envoi de la photo de profil")
+      },
+    })
   }
 
   const handlePreferenceToggle = (key: keyof UserPreferences, value: boolean) => {
@@ -72,12 +82,23 @@ export default function ProfilePage() {
             </Avatar>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="absolute -right-1 -bottom-1 flex size-7 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-sm cursor-pointer"
+              disabled={uploadAvatar.isPending}
+              className="absolute -right-1 -bottom-1 flex size-7 items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground shadow-sm cursor-pointer disabled:opacity-60"
               aria-label="Changer la photo de profil"
             >
-              <CameraIcon className="size-3.5" />
+              {uploadAvatar.isPending ? (
+                <LoaderCircleIcon className="size-3.5 animate-spin" />
+              ) : (
+                <CameraIcon className="size-3.5" />
+              )}
             </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPick} />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleAvatarPick}
+            />
           </div>
           <div className="text-center sm:text-left">
             <p className="text-lg font-semibold">

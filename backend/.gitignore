@@ -29,6 +29,9 @@ build/
 # Local dev database (started manually, not part of the repo)
 .mongo-data/
 
+# User-uploaded files (avatars, etc.)
+uploads/
+
 # Misc
 *.pid
 *.seed

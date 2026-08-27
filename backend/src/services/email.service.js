@@ -21,6 +21,12 @@ function getTransporter() {
 }
 
 async function sendMail({ to, subject, text, html }) {
+  // La suite Jest ne doit jamais tenter une vraie connexion SMTP (lente,
+  // dépendante du réseau, et enverrait de vrais e-mails) — même si un SMTP
+  // réel est configuré en local pour les tests manuels dans le navigateur.
+  // Même principe que `skip: () => env.isTest` sur les rate limiters.
+  if (env.isTest) return;
+
   if (!isSmtpConfigured()) {
     if (env.isProduction) {
       throw new Error('Configuration SMTP manquante (SMTP_HOST/SMTP_USER/SMTP_PASSWORD)');

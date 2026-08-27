@@ -85,4 +85,13 @@ export const userService = {
       return mapUser(data.data)
     }, "Échec de la modification du rôle")
   },
+
+  async uploadAvatar(file: File): Promise<User> {
+    return request(async () => {
+      const formData = new FormData()
+      formData.append("avatar", file)
+      const { data } = await api.post("/users/me/avatar", formData)
+      return mapUser(data.data)
+    }, "Échec de l'envoi de la photo de profil")
+  },
 }

@@ -43,5 +43,10 @@ export function useUserMutations() {
     onSuccess: invalidate,
   })
 
-  return { createUser, updateUser, deleteUser, toggleStatus, resetPassword, assignRole }
+  const uploadAvatar = useMutation({
+    mutationFn: (file: File) => userService.uploadAvatar(file),
+    onSuccess: invalidate,
+  })
+
+  return { createUser, updateUser, deleteUser, toggleStatus, resetPassword, assignRole, uploadAvatar }
 }

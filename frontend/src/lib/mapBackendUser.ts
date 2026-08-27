@@ -1,4 +1,15 @@
+import { API_ORIGIN } from "@/lib/axios"
 import type { User } from "@/types/user"
+
+// Le backend renvoie un chemin relatif ("/uploads/avatars/xxx.jpg") : on le
+// résout en URL absolue ici, au point d'entrée unique de tous les users
+// affichés dans l'app. Les URLs déjà absolues (http/https/blob/data) passent
+// telles quelles.
+function resolveAvatarUrl(avatarUrl?: string | null): string | undefined {
+  if (!avatarUrl) return undefined
+  if (/^(https?:|blob:|data:)/.test(avatarUrl)) return avatarUrl
+  return `${API_ORIGIN}${avatarUrl}`
+}
 
 export interface BackendUser {
   id: string
@@ -29,7 +40,7 @@ export function mapBackendUser(raw: BackendUser): User {
     createdAt: raw.createdAt ?? new Date().toISOString(),
     lastActiveAt: raw.lastActiveAt ?? undefined,
     phone: raw.phone ?? undefined,
-    avatarUrl: raw.avatarUrl ?? undefined,
+    avatarUrl: resolveAvatarUrl(raw.avatarUrl),
     preferences: raw.preferences ?? { darkMode: false, emailNotifications: true, pushNotifications: true, weeklyDigest: true },
   }
 }

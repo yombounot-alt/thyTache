@@ -25,6 +25,11 @@ function normalizeError(err) {
     return new AppError('Corps de requête JSON invalide', httpStatus.BAD_REQUEST);
   }
 
+  if (err.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Fichier trop volumineux (2 Mo maximum)' : 'Fichier invalide';
+    return new AppError(message, httpStatus.BAD_REQUEST);
+  }
+
   return null;
 }
 
