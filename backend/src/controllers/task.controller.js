@@ -7,7 +7,7 @@ const createTask = catchAsync(async (req, res) => {
   const { title, description, category, priority, assigneeId, dueDate, tags } = req.body;
   const task = await taskService.createTask(
     { title, description, category, priority, assigneeId, dueDate, tags },
-    req.user.id
+    req.user
   );
 
   sendSuccess(res, {
@@ -18,17 +18,17 @@ const createTask = catchAsync(async (req, res) => {
 });
 
 const listTasks = catchAsync(async (req, res) => {
-  const { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId } = req.query;
+  const { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope } = req.query;
   const result = await taskService.listTasks(
-    { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId },
-    req.user.id
+    { page, pageSize, sortBy, sortDir, search, status, priority, category, assigneeId, scope },
+    req.user
   );
 
   sendSuccess(res, { data: result });
 });
 
 const getTask = catchAsync(async (req, res) => {
-  const task = await taskService.getTaskById(req.params.id, req.user.id);
+  const task = await taskService.getTaskById(req.params.id, req.user);
   sendSuccess(res, { data: task });
 });
 
@@ -37,7 +37,7 @@ const updateTask = catchAsync(async (req, res) => {
   const task = await taskService.updateTask(
     req.params.id,
     { title, description, category, priority, assigneeId, dueDate, tags, status, progress },
-    req.user.id
+    req.user
   );
   sendSuccess(res, { message: 'Tâche mise à jour avec succès.', data: task });
 });
@@ -45,6 +45,11 @@ const updateTask = catchAsync(async (req, res) => {
 const deleteTask = catchAsync(async (req, res) => {
   await taskService.deleteTask(req.params.id, req.user.id);
   sendSuccess(res, { message: 'Tâche supprimée avec succès.' });
+});
+
+const restoreTask = catchAsync(async (req, res) => {
+  const task = await taskService.restoreTask(req.params.id, req.user.id);
+  sendSuccess(res, { message: 'Tâche restaurée avec succès.', data: task });
 });
 
 const addComment = catchAsync(async (req, res) => {
@@ -59,29 +64,29 @@ const addAttachment = catchAsync(async (req, res) => {
 });
 
 const getStats = catchAsync(async (req, res) => {
-  const stats = await taskService.getStats(req.user.id);
+  const stats = await taskService.getStats(req.user, req.query.scope);
   sendSuccess(res, { data: stats });
 });
 
 const getEvolution = catchAsync(async (req, res) => {
   const days = Number(req.query.days) || 14;
-  const evolution = await taskService.getEvolution(req.user.id, days);
+  const evolution = await taskService.getEvolution(req.user, days, req.query.scope);
   sendSuccess(res, { data: evolution });
 });
 
 const getStatusDistribution = catchAsync(async (req, res) => {
-  const distribution = await taskService.getStatusDistribution(req.user.id);
+  const distribution = await taskService.getStatusDistribution(req.user, req.query.scope);
   sendSuccess(res, { data: distribution });
 });
 
 const getAssigneeDistribution = catchAsync(async (req, res) => {
-  const distribution = await taskService.getAssigneeDistribution(req.user.id);
+  const distribution = await taskService.getAssigneeDistribution(req.user, req.query.scope);
   sendSuccess(res, { data: distribution });
 });
 
 const getRecentActivity = catchAsync(async (req, res) => {
   const limit = Number(req.query.limit) || 8;
-  const activity = await taskService.getRecentActivity(req.user.id, limit);
+  const activity = await taskService.getRecentActivity(req.user, limit, req.query.scope);
   sendSuccess(res, { data: activity });
 });
 
@@ -91,6 +96,7 @@ module.exports = {
   getTask,
   updateTask,
   deleteTask,
+  restoreTask,
   addComment,
   addAttachment,
   getStats,

@@ -43,6 +43,34 @@ describe('GET /tasks/stats', () => {
   });
 });
 
+describe('GET /tasks/stats?scope=all (RBAC admin)', () => {
+  it('agrège les tâches de toute la plateforme pour un admin avec scope=all', async () => {
+    const { accessToken: memberToken } = await loginAs({ email: 'stats-member@example.com', role: 'member' });
+    const { accessToken: adminToken } = await loginAs({ email: 'stats-admin@example.com', role: 'admin' });
+
+    await request(app).post(base).set('Authorization', `Bearer ${memberToken}`).send(payload({ title: 'Tâche membre' }));
+    await request(app).post(base).set('Authorization', `Bearer ${adminToken}`).send(payload({ title: 'Tâche admin' }));
+
+    const allScope = await request(app).get(`${base}/stats`).query({ scope: 'all' }).set('Authorization', `Bearer ${adminToken}`);
+    const mineScope = await request(app).get(`${base}/stats`).set('Authorization', `Bearer ${adminToken}`);
+
+    expect(allScope.body.data.total).toBe(2);
+    expect(mineScope.body.data.total).toBe(1);
+  });
+
+  it("ignore scope=all pour un utilisateur standard (reste cantonné à ses tâches)", async () => {
+    const { accessToken: tokenA } = await loginAs({ email: 'stats-std-a@example.com', role: 'member' });
+    const { accessToken: tokenB } = await loginAs({ email: 'stats-std-b@example.com', role: 'member' });
+
+    await request(app).post(base).set('Authorization', `Bearer ${tokenA}`).send(payload({ title: 'Tâche A' }));
+    await request(app).post(base).set('Authorization', `Bearer ${tokenB}`).send(payload({ title: 'Tâche B' }));
+
+    const res = await request(app).get(`${base}/stats`).query({ scope: 'all' }).set('Authorization', `Bearer ${tokenA}`);
+
+    expect(res.body.data.total).toBe(1);
+  });
+});
+
 describe('GET /tasks/status-distribution', () => {
   it('retourne un compte par statut couvrant tous les statuts possibles', async () => {
     const { accessToken } = await loginAs({ email: 'status-dist@example.com' });

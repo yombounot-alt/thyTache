@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../src/app');
 const { env } = require('../../src/config/env');
+const Task = require('../../src/models/Task');
 const { loginAs } = require('../helpers/factories');
 const { connectTestDB, clearTestDB, closeTestDB } = require('../helpers/db');
 
@@ -132,7 +133,7 @@ describe('PATCH /tasks/:id', () => {
   });
 });
 
-describe('DELETE /tasks/:id', () => {
+describe('DELETE /tasks/:id (suppression logique)', () => {
   it('supprime une tâche dont on est le créateur', async () => {
     const { accessToken } = await loginAs({ email: 'task-delete@example.com' });
     const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
@@ -142,6 +143,112 @@ describe('DELETE /tasks/:id', () => {
 
     const getRes = await request(app).get(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
     expect(getRes.status).toBe(404);
+  });
+
+  it('conserve la tâche en base avec isDeleted=true, deletedAt et deletedBy renseignés', async () => {
+    const { accessToken, user } = await loginAs({ email: 'task-delete-soft@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+
+    await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const inDb = await Task.findById(created.body.data._id);
+    expect(inDb).not.toBeNull();
+    expect(inDb.isDeleted).toBe(true);
+    expect(inDb.deletedAt).not.toBeNull();
+    expect(String(inDb.deletedBy)).toBe(user.id.toString());
+  });
+
+  it("n'apparaît plus dans la liste normale après suppression", async () => {
+    const { accessToken } = await loginAs({ email: 'task-delete-list@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+    await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request(app).get(base).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.body.data.data).toHaveLength(0);
+    expect(res.body.data.meta.total).toBe(0);
+  });
+
+  it('refuse de supprimer une tâche déjà supprimée (409)', async () => {
+    const { accessToken } = await loginAs({ email: 'task-delete-twice@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+    await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.status).toBe(409);
+  });
+
+  it('rejette une suppression non authentifiée', async () => {
+    const { accessToken } = await loginAs({ email: 'task-delete-auth@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+
+    const res = await request(app).delete(`${base}/${created.body.data._id}`);
+    expect(res.status).toBe(401);
+  });
+
+  it("refuse la suppression d'une tâche d'un autre utilisateur (404) sans la supprimer", async () => {
+    const { accessToken: tokenA } = await loginAs({ email: 'task-delete-other-a@example.com' });
+    const { accessToken: tokenB } = await loginAs({ email: 'task-delete-other-b@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${tokenA}`).send(validTaskPayload());
+
+    const res = await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${tokenB}`);
+    expect(res.status).toBe(404);
+
+    const stillThere = await request(app).get(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${tokenA}`);
+    expect(stillThere.status).toBe(200);
+  });
+
+  it('rejette un identifiant MongoDB invalide (422, pas une erreur 500)', async () => {
+    const { accessToken } = await loginAs({ email: 'task-delete-invalid-id@example.com' });
+    const res = await request(app).delete(`${base}/not-a-valid-id`).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.status).toBe(422);
+  });
+
+  it("ne perturbe pas les autres tâches de l'utilisateur", async () => {
+    const { accessToken } = await loginAs({ email: 'task-delete-others-unaffected@example.com' });
+    const created1 = await request(app)
+      .post(base)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(validTaskPayload({ title: 'À supprimer' }));
+    await request(app)
+      .post(base)
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send(validTaskPayload({ title: 'À garder' }));
+
+    await request(app).delete(`${base}/${created1.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request(app).get(base).set('Authorization', `Bearer ${accessToken}`);
+    expect(res.body.data.data).toHaveLength(1);
+    expect(res.body.data.data[0].title).toBe('À garder');
+  });
+});
+
+describe('PATCH /tasks/:id/restore', () => {
+  it('restaure une tâche supprimée', async () => {
+    const { accessToken } = await loginAs({ email: 'task-restore@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+    await request(app).delete(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+
+    const res = await request(app)
+      .patch(`${base}/${created.body.data._id}/restore`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.isDeleted).toBe(false);
+    expect(res.body.data.deletedAt).toBeNull();
+
+    const getRes = await request(app).get(`${base}/${created.body.data._id}`).set('Authorization', `Bearer ${accessToken}`);
+    expect(getRes.status).toBe(200);
+  });
+
+  it('refuse de restaurer une tâche non supprimée (409)', async () => {
+    const { accessToken } = await loginAs({ email: 'task-restore-not-deleted@example.com' });
+    const created = await request(app).post(base).set('Authorization', `Bearer ${accessToken}`).send(validTaskPayload());
+
+    const res = await request(app)
+      .patch(`${base}/${created.body.data._id}/restore`)
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(409);
   });
 });
 

@@ -6,6 +6,10 @@ const taskIdParam = param('id').isMongoId().withMessage('Identifiant de tâche i
 
 const SORTABLE_FIELDS = ['title', 'status', 'priority', 'category', 'createdAt', 'dueDate', 'progress'];
 
+// `scope=all` n'a d'effet que pour un admin (cf. task.service.resolveFilter) ;
+// pour tout autre utilisateur la valeur est simplement ignorée côté service.
+const scopeQuery = query('scope').optional().isIn(['all', 'mine']).withMessage('scope doit être "all" ou "mine"');
+
 // qs ne renvoie un tableau que si le paramètre apparaît plusieurs fois dans
 // l'URL (ex: status=todo&status=done) ; une seule occurrence reste une
 // simple chaîne, d'où cette normalisation avant validation du contenu.
@@ -90,6 +94,7 @@ const listTasksValidator = [
     .withMessage(`sortBy doit être parmi : ${SORTABLE_FIELDS.join(', ')}`),
   query('sortDir').optional().isIn(['asc', 'desc']).withMessage('sortDir doit être "asc" ou "desc"'),
   query('assigneeId').optional().isMongoId().withMessage("L'identifiant de l'assigné est invalide"),
+  scopeQuery,
   enumListQuery('status', TASK_STATUSES, 'status'),
   enumListQuery('priority', TASK_PRIORITIES, 'priority'),
   enumListQuery('category', TASK_CATEGORIES, 'category'),
@@ -174,13 +179,17 @@ const addAttachmentValidator = [
 
 const evolutionQueryValidator = [
   query('days').optional().isInt({ min: 1, max: 90 }).withMessage('days doit être un entier entre 1 et 90'),
+  scopeQuery,
   validate,
 ];
 
 const activityQueryValidator = [
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('limit doit être un entier entre 1 et 50'),
+  scopeQuery,
   validate,
 ];
+
+const statsQueryValidator = [scopeQuery, validate];
 
 module.exports = {
   createTaskValidator,
@@ -189,6 +198,7 @@ module.exports = {
   updateTaskValidator,
   addCommentValidator,
   addAttachmentValidator,
+  statsQueryValidator,
   evolutionQueryValidator,
   activityQueryValidator,
 };

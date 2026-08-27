@@ -119,6 +119,20 @@ const taskSchema = new mongoose.Schema(
       type: [historySchema],
       default: [],
     },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
   },
   { timestamps: true }
 );
@@ -127,6 +141,8 @@ taskSchema.set('toJSON', {
   transform: (_doc, ret) => {
     ret.assigneeId = ret.assignee ? String(ret.assignee) : null;
     ret.creatorId = String(ret.creator);
+    ret.deletedById = ret.deletedBy ? String(ret.deletedBy) : null;
+    delete ret.deletedBy;
     delete ret.assignee;
     delete ret.creator;
     delete ret.__v;

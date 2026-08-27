@@ -2,7 +2,7 @@ const taskRepository = require('../repositories/task.repository');
 const userRepository = require('../repositories/user.repository');
 const notificationService = require('./notification.service');
 const { TASK_STATUSES } = require('../models/Task');
-const { NotFoundError, ForbiddenError } = require('../errors');
+const { NotFoundError, ForbiddenError, ConflictError } = require('../errors');
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -12,8 +12,18 @@ function scopeFilter(userId) {
   return { $or: [{ creator: userId }, { assignee: userId }] };
 }
 
-// Le créateur et l'assigné (aujourd'hui toujours la même personne, cf. règle
-// d'auto-assignation) sont les seuls à pouvoir voir/modifier une tâche.
+// Centralise la même règle que pour la liste : un admin qui demande
+// `scope=all` voit tout, tout le monde d'autre (y compris un admin sans ce
+// paramètre) reste cantonné à ses propres tâches (créateur ou assigné).
+function resolveFilter(user, scope) {
+  return user.role === 'admin' && scope === 'all' ? {} : scopeFilter(user.id);
+}
+
+// Le créateur et l'assigné sont les seuls à pouvoir modifier une tâche
+// (commenter, joindre un fichier, changer son statut, la supprimer) — y
+// compris pour un admin, qui n'a pas de passe-droit ici : son privilège élargi
+// se limite à la LECTURE (cf. findVisibleTask) et à l'attribution d'assigné
+// (cf. createTask/updateTask).
 function canAccess(task, userId) {
   return String(task.creator) === String(userId) || (task.assignee && String(task.assignee) === String(userId));
 }
@@ -26,15 +36,35 @@ async function findAccessibleTask(id, userId) {
   return task;
 }
 
-// À la création, un utilisateur ne peut assigner la tâche qu'à lui-même (ou
-// la laisser non assignée) : impossible de créer une tâche pour un collègue.
-async function createTask({ title, description, category, priority, assigneeId, dueDate, tags }, creatorId) {
+// Lecture seule : un admin peut consulter n'importe quelle tâche (droit RBAC
+// "voir toutes les tâches"), sans que cela lui donne les droits de
+// modification/suppression accordés par canAccess ci-dessus.
+async function findVisibleTask(id, user) {
+  const task = await taskRepository.findById(id);
+  if (!task) {
+    throw new NotFoundError('Tâche introuvable');
+  }
+  if (user.role !== 'admin' && !canAccess(task, user.id)) {
+    throw new NotFoundError('Tâche introuvable');
+  }
+  return task;
+}
+
+// Un utilisateur standard ne peut assigner la tâche qu'à lui-même (ou la
+// laisser non assignée) : impossible de créer une tâche pour un collègue.
+// Un admin peut en revanche l'attribuer à n'importe quel utilisateur existant
+// de la plateforme — vérifié en base, jamais sur la seule foi du frontend.
+async function createTask({ title, description, category, priority, assigneeId, dueDate, tags }, creator) {
+  const creatorId = creator.id;
+  const isAdmin = creator.role === 'admin';
+  let assignee = null;
+
   if (assigneeId) {
-    if (assigneeId !== String(creatorId)) {
+    if (!isAdmin && assigneeId !== String(creatorId)) {
       throw new ForbiddenError('Vous ne pouvez assigner une tâche qu\'à vous-même');
     }
 
-    const assignee = await userRepository.findById(assigneeId);
+    assignee = await userRepository.findById(assigneeId);
     if (!assignee) {
       throw new NotFoundError('Utilisateur assigné introuvable');
     }
@@ -59,11 +89,28 @@ async function createTask({ title, description, category, priority, assigneeId, 
     link: `/tasks/${task.id}`,
   });
 
+  // Distinct de la notification ci-dessus : uniquement quand un admin attribue
+  // la tâche à quelqu'un d'autre que lui-même.
+  if (assignee && String(assigneeId) !== String(creatorId)) {
+    await notificationService.notify(assigneeId, {
+      type: 'task_assigned',
+      title: 'Nouvelle tâche assignée',
+      message: `« ${task.title} » vous a été attribuée.`,
+      link: `/tasks/${task.id}`,
+    });
+  }
+
   return task;
 }
 
-// Un utilisateur ne voit que les tâches dont il est créateur ou assigné
-// (cohérent avec la règle de création : on ne peut créer que pour soi-même).
+// Un utilisateur standard ne voit que les tâches dont il est créateur ou
+// assigné (cohérent avec la règle de création : on ne peut créer que pour
+// soi-même, sauf admin). Un admin peut demander `scope=all` pour voir toutes
+// les tâches de la plateforme ; toute autre valeur (ou l'absence du
+// paramètre) reste scopée à "mes tâches", y compris pour un admin.
+// Le rôle vient de `user` (rechargé en base par `authenticate`), jamais du
+// contenu de la requête : un utilisateur standard qui force `scope=all`
+// depuis Postman reste silencieusement ramené à son propre périmètre.
 async function listTasks(
   {
     page,
@@ -75,15 +122,16 @@ async function listTasks(
     priority,
     category,
     assigneeId,
+    scope,
   },
-  userId
+  user
 ) {
   // express-validator ne peut pas muter `req.query` sous Express 5 (lecture
   // seule) : `.toInt()` n'a donc aucun effet, on reconvertit ici explicitement.
   page = Number(page) || 1;
   pageSize = Number(pageSize) || 10;
 
-  const filter = { $or: [{ creator: userId }, { assignee: userId }] };
+  const filter = resolveFilter(user, scope);
 
   if (search) {
     const regex = new RegExp(escapeRegex(search), 'i');
@@ -108,16 +156,28 @@ async function listTasks(
   };
 }
 
-async function getTaskById(id, userId) {
-  return findAccessibleTask(id, userId);
+async function getTaskById(id, user) {
+  return findVisibleTask(id, user);
 }
 
-async function updateTask(id, patch, userId) {
+// Même règle d'attribution qu'à la création (cf. createTask) : un admin peut
+// réassigner à n'importe quel utilisateur existant, un utilisateur standard
+// uniquement à lui-même.
+async function updateTask(id, patch, user) {
+  const userId = user.id;
   const task = await findAccessibleTask(id, userId);
   const { title, description, category, priority, assigneeId, dueDate, tags, status, progress } = patch;
 
-  if (assigneeId !== undefined && assigneeId !== null && assigneeId !== String(userId)) {
-    throw new ForbiddenError('Vous ne pouvez assigner une tâche qu\'à vous-même');
+  if (assigneeId !== undefined && assigneeId !== null) {
+    if (user.role !== 'admin' && assigneeId !== String(userId)) {
+      throw new ForbiddenError('Vous ne pouvez assigner une tâche qu\'à vous-même');
+    }
+    if (user.role === 'admin') {
+      const assignee = await userRepository.findById(assigneeId);
+      if (!assignee) {
+        throw new NotFoundError('Utilisateur assigné introuvable');
+      }
+    }
   }
 
   const wasDone = task.status === 'done';
@@ -154,12 +214,43 @@ async function updateTask(id, patch, userId) {
   return task;
 }
 
+// Suppression logique uniquement : la tâche reste en base (historique,
+// statistiques, restauration future) mais devient invisible des lectures
+// normales (cf. task.repository.findMany/findById qui filtrent isDeleted).
+// Seul le créateur peut supprimer, comme pour la modification (findAccessibleTask) ;
+// un utilisateur non créateur reçoit un 404 (et non 403) pour ne pas révéler
+// l'existence de la tâche, cohérent avec le reste de l'API.
 async function deleteTask(id, userId) {
-  const task = await taskRepository.findById(id);
+  const task = await taskRepository.findByIdAny(id);
   if (!task || String(task.creator) !== String(userId)) {
     throw new NotFoundError('Tâche introuvable');
   }
-  await taskRepository.deleteById(id);
+  if (task.isDeleted) {
+    throw new ConflictError('Cette tâche a déjà été supprimée');
+  }
+
+  task.isDeleted = true;
+  task.deletedAt = new Date();
+  task.deletedBy = userId;
+  task.history.unshift({ actor: userId, action: 'deleted', detail: 'Tâche supprimée' });
+  await task.save();
+}
+
+async function restoreTask(id, userId) {
+  const task = await taskRepository.findByIdAny(id);
+  if (!task || String(task.creator) !== String(userId)) {
+    throw new NotFoundError('Tâche introuvable');
+  }
+  if (!task.isDeleted) {
+    throw new ConflictError("Cette tâche n'est pas supprimée");
+  }
+
+  task.isDeleted = false;
+  task.deletedAt = null;
+  task.deletedBy = null;
+  task.history.unshift({ actor: userId, action: 'restored', detail: 'Tâche restaurée' });
+  await task.save();
+  return task;
 }
 
 async function addComment(id, userId, content) {
@@ -178,8 +269,13 @@ async function addAttachment(id, userId, { name, sizeKb, type }) {
   return task;
 }
 
-async function getStats(userId) {
-  const tasks = await taskRepository.findMany(scopeFilter(userId), { skip: 0, limit: 0, sort: {} });
+// Les 5 fonctions ci-dessous acceptent `scope='all'` selon la même règle que
+// listTasks (effectif uniquement pour un admin) : c'est ce qui permet aux
+// tableaux de bord admin (AdminDashboard/AdminStatistics côté frontend)
+// d'afficher des chiffres à l'échelle de la plateforme plutôt que ceux du
+// seul admin connecté, sans dupliquer la logique d'autorisation.
+async function getStats(user, scope) {
+  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   const now = new Date();
   return {
     total: tasks.length,
@@ -190,8 +286,8 @@ async function getStats(userId) {
   };
 }
 
-async function getEvolution(userId, days = 14) {
-  const tasks = await taskRepository.findMany(scopeFilter(userId), { skip: 0, limit: 0, sort: {} });
+async function getEvolution(user, days = 14, scope) {
+  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const buckets = [];
@@ -209,16 +305,16 @@ async function getEvolution(userId, days = 14) {
   return buckets;
 }
 
-async function getStatusDistribution(userId) {
-  const tasks = await taskRepository.findMany(scopeFilter(userId), { skip: 0, limit: 0, sort: {} });
+async function getStatusDistribution(user, scope) {
+  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   return TASK_STATUSES.map((status) => ({
     status,
     count: tasks.filter((t) => t.status === status).length,
   }));
 }
 
-async function getAssigneeDistribution(userId) {
-  const tasks = await taskRepository.findMany(scopeFilter(userId), { skip: 0, limit: 0, sort: {} });
+async function getAssigneeDistribution(user, scope) {
+  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   const counts = new Map();
   tasks.forEach((t) => {
     if (!t.assignee) return;
@@ -228,8 +324,8 @@ async function getAssigneeDistribution(userId) {
   return Array.from(counts.entries()).map(([userId2, count]) => ({ userId: userId2, count }));
 }
 
-async function getRecentActivity(userId, limit = 8) {
-  const tasks = await taskRepository.findMany(scopeFilter(userId), { skip: 0, limit: 0, sort: {} });
+async function getRecentActivity(user, limit = 8, scope) {
+  const tasks = await taskRepository.findMany(resolveFilter(user, scope), { skip: 0, limit: 0, sort: {} });
   return tasks
     .flatMap((t) =>
       t.history.map((h) => ({
@@ -252,6 +348,7 @@ module.exports = {
   getTaskById,
   updateTask,
   deleteTask,
+  restoreTask,
   addComment,
   addAttachment,
   getStats,

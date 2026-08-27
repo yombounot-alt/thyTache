@@ -9,6 +9,7 @@ const {
   addAttachmentValidator,
   evolutionQueryValidator,
   activityQueryValidator,
+  statsQueryValidator,
 } = require('../validators/task.validator');
 const taskController = require('../controllers/task.controller');
 
@@ -18,11 +19,17 @@ const router = Router();
  * @openapi
  * /tasks:
  *   get:
- *     summary: Liste les tâches de l'utilisateur connecté (créateur ou assigné)
+ *     summary: >
+ *       Liste les tâches de l'utilisateur connecté (créateur ou assigné).
+ *       Pour un admin, `scope=all` retourne toutes les tâches de la plateforme
+ *       (ignoré pour un utilisateur standard, qui reste toujours scopé à ses tâches).
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
  *     parameters:
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
@@ -64,7 +71,10 @@ router.get('/tasks', authenticate, listTasksValidator, taskController.listTasks)
  * @openapi
  * /tasks:
  *   post:
- *     summary: Crée une nouvelle tâche
+ *     summary: >
+ *       Crée une nouvelle tâche. Un utilisateur standard ne peut l'assigner
+ *       qu'à lui-même ; un admin peut l'attribuer à n'importe quel utilisateur
+ *       existant de la plateforme.
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
@@ -104,15 +114,21 @@ router.post('/tasks', authenticate, createTaskValidator, taskController.createTa
  * @openapi
  * /tasks/stats:
  *   get:
- *     summary: Statistiques agrégées sur les tâches de l'utilisateur connecté
+ *     summary: >
+ *       Statistiques agrégées sur les tâches de l'utilisateur connecté.
+ *       `scope=all` (admin uniquement) porte sur toutes les tâches de la plateforme.
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *     responses:
  *       200:
  *         description: Statistiques (total, terminées, en cours, en attente, en retard)
  */
-router.get('/tasks/stats', authenticate, taskController.getStats);
+router.get('/tasks/stats', authenticate, statsQueryValidator, taskController.getStats);
 
 /**
  * @openapi
@@ -126,6 +142,9 @@ router.get('/tasks/stats', authenticate, taskController.getStats);
  *       - in: query
  *         name: days
  *         schema: { type: integer, default: 14 }
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *     responses:
  *       200:
  *         description: Série temporelle { date, created, completed }
@@ -140,11 +159,15 @@ router.get('/tasks/evolution', authenticate, evolutionQueryValidator, taskContro
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *     responses:
  *       200:
  *         description: Liste { status, count }
  */
-router.get('/tasks/status-distribution', authenticate, taskController.getStatusDistribution);
+router.get('/tasks/status-distribution', authenticate, statsQueryValidator, taskController.getStatusDistribution);
 
 /**
  * @openapi
@@ -154,11 +177,20 @@ router.get('/tasks/status-distribution', authenticate, taskController.getStatusD
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *     responses:
  *       200:
  *         description: Liste { userId, count }
  */
-router.get('/tasks/assignees-distribution', authenticate, taskController.getAssigneeDistribution);
+router.get(
+  '/tasks/assignees-distribution',
+  authenticate,
+  statsQueryValidator,
+  taskController.getAssigneeDistribution
+);
 
 /**
  * @openapi
@@ -172,6 +204,9 @@ router.get('/tasks/assignees-distribution', authenticate, taskController.getAssi
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 8 }
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string, enum: [mine, all], default: mine }
  *     responses:
  *       200:
  *         description: Liste des entrées d'historique les plus récentes, tous statuts confondus
@@ -182,7 +217,7 @@ router.get('/tasks/activity', authenticate, activityQueryValidator, taskControll
  * @openapi
  * /tasks/{id}:
  *   get:
- *     summary: Détail d'une tâche (créateur ou assigné uniquement)
+ *     summary: Détail d'une tâche (créateur, assigné, ou n'importe quel admin)
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
@@ -244,7 +279,10 @@ router.patch('/tasks/:id', authenticate, updateTaskValidator, taskController.upd
  * @openapi
  * /tasks/{id}:
  *   delete:
- *     summary: Supprime une tâche (créateur uniquement)
+ *     summary: Supprime une tâche (suppression logique, créateur uniquement)
+ *     description: >
+ *       La tâche n'est jamais supprimée physiquement : elle est marquée
+ *       isDeleted=true et n'apparaît plus dans les listes/recherches normales.
  *     tags: [Tasks]
  *     security:
  *       - bearerAuth: []
@@ -258,8 +296,33 @@ router.patch('/tasks/:id', authenticate, updateTaskValidator, taskController.upd
  *         description: Tâche supprimée
  *       404:
  *         description: Tâche introuvable (ou non accessible)
+ *       409:
+ *         description: Tâche déjà supprimée
  */
 router.delete('/tasks/:id', authenticate, taskIdValidator, taskController.deleteTask);
+
+/**
+ * @openapi
+ * /tasks/{id}/restore:
+ *   patch:
+ *     summary: Restaure une tâche supprimée logiquement (créateur uniquement)
+ *     tags: [Tasks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Tâche restaurée
+ *       404:
+ *         description: Tâche introuvable (ou non accessible)
+ *       409:
+ *         description: Tâche non supprimée
+ */
+router.patch('/tasks/:id/restore', authenticate, taskIdValidator, taskController.restoreTask);
 
 /**
  * @openapi
