@@ -50,6 +50,4 @@ export const USER_ROLE_COLORS: Record<UserRole, string> = {
   member: "bg-muted text-muted-foreground",
 }
 
-export const MOCK_NETWORK_DELAY_MS = 450
-
 export const APP_NAME = "thyTache"

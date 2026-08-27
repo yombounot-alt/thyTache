@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom"
 import { ChevronsLeftIcon, ShieldIcon } from "lucide-react"
 
-import logo from "@/assets/thy_logo.jpeg"
+import logo from "@/assets/logo.jpeg"
 import { cn } from "@/lib/utils"
 import { useAuthStore } from "@/store/authStore"
 import { useUiStore } from "@/store/uiStore"

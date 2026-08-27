@@ -94,6 +94,18 @@ export const authService = {
     }
   },
 
+  // Usage normal : géré en interne par l'intercepteur axios (@/lib/axios) sur
+  // un 401, avec dédoublonnage des requêtes concurrentes. Exposé ici aussi
+  // pour un déclenchement manuel explicite si un appelant en a besoin.
+  async refreshToken(): Promise<{ accessToken: string }> {
+    try {
+      const { data } = await api.post("/auth/refresh-token")
+      return data.data
+    } catch (error) {
+      throw toApiError(error, "Échec du renouvellement de la session")
+    }
+  },
+
   async getCurrentUser(): Promise<User> {
     try {
       const { data } = await api.get("/auth/me")

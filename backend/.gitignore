@@ -26,6 +26,9 @@ Thumbs.db
 dist/
 build/
 
+# Local dev database (started manually, not part of the repo)
+.mongo-data/
+
 # Misc
 *.pid
 *.seed

@@ -10,7 +10,7 @@ import {
   UsersIcon,
 } from "lucide-react"
 
-import logo from "@/assets/thy_logo.jpeg"
+import logo from "@/assets/logo.jpeg"
 import { Button } from "@/components/ui/button"
 import { APP_NAME } from "@/utils/constants"
 

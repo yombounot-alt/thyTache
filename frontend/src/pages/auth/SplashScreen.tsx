@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { motion } from "framer-motion"
 
-import logo from "@/assets/thy_logo.jpeg"
+import logo from "@/assets/logo.jpeg"
 import { useAuthStore } from "@/store/authStore"
 import { APP_NAME } from "@/utils/constants"
 

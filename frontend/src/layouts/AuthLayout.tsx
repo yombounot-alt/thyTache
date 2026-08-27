@@ -2,7 +2,7 @@ import { Outlet } from "react-router-dom"
 import { motion } from "framer-motion"
 import { CheckCircle2Icon, ShieldCheckIcon, SparklesIcon } from "lucide-react"
 
-import logo from "@/assets/thy_logo.jpeg"
+import logo from "@/assets/logo.jpeg"
 import { APP_NAME } from "@/utils/constants"
 
 const highlights = [
