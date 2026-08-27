@@ -1,6 +1,7 @@
 const { env, validateEnv } = require('./config/env');
 const logger = require('./config/logger');
 const { connectDB, disconnectDB } = require('./config/database');
+const { startScheduler } = require('./config/scheduler');
 const app = require('./app');
 
 let server;
@@ -16,6 +17,8 @@ async function start() {
       logger.info(`${env.appName} démarré sur le port ${env.port} (env: ${env.nodeEnv})`);
       logger.info(`Documentation API disponible sur /api-docs`);
     });
+
+    startScheduler();
   } catch (error) {
     logger.error(`Démarrage impossible: ${error.message}`);
     process.exit(1);

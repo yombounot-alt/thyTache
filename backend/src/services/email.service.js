@@ -108,4 +108,45 @@ async function sendNotificationEmail(to, { title, message }) {
   await sendMail({ to, subject, text, html });
 }
 
-module.exports = { sendMail, sendOtpEmail, sendNotificationEmail, isSmtpConfigured };
+function buildWeeklyDigestEmail({ firstName, total, completedThisWeek, createdThisWeek, inProgress, overdue }) {
+  const subject = `${env.appName} — Votre résumé hebdomadaire`;
+  const rows = [
+    ['Tâches terminées cette semaine', completedThisWeek],
+    ['Tâches créées cette semaine', createdThisWeek],
+    ['Tâches en cours', inProgress],
+    ['Tâches en retard', overdue],
+    ['Total de vos tâches actives', total],
+  ];
+  const text = [
+    `Bonjour ${firstName},`,
+    `Voici votre résumé de la semaine sur ${env.appName} :`,
+    ...rows.map(([label, value]) => `- ${label} : ${value}`),
+  ].join('\n');
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto;">
+      <h2>${env.appName}</h2>
+      <p>Bonjour ${firstName},</p>
+      <p>Voici votre résumé de la semaine :</p>
+      <table style="width: 100%; border-collapse: collapse;">
+        ${rows
+          .map(
+            ([label, value]) => `
+          <tr>
+            <td style="padding: 6px 0; border-bottom: 1px solid #eee;">${label}</td>
+            <td style="padding: 6px 0; border-bottom: 1px solid #eee; text-align: right; font-weight: 600;">${value}</td>
+          </tr>`
+          )
+          .join('')}
+      </table>
+      <p style="color: #888; font-size: 13px; margin-top: 16px;">Connectez-vous à ${env.appName} pour voir le détail.</p>
+    </div>
+  `;
+  return { subject, text, html };
+}
+
+async function sendWeeklyDigestEmail(to, data) {
+  const { subject, text, html } = buildWeeklyDigestEmail(data);
+  await sendMail({ to, subject, text, html });
+}
+
+module.exports = { sendMail, sendOtpEmail, sendNotificationEmail, sendWeeklyDigestEmail, isSmtpConfigured };

@@ -188,7 +188,13 @@ async function updateTask(id, patch, user) {
   if (category !== undefined) task.category = category;
   if (priority !== undefined) task.priority = priority;
   if (assigneeId !== undefined) task.assignee = assigneeId || null;
-  if (dueDate !== undefined) task.dueDate = dueDate || null;
+  // Une échéance repoussée doit pouvoir redevenir "en retard" plus tard et
+  // re-déclencher une notification (cf. jobs/overdueTasks.job.js) : on lève
+  // le marqueur dès que la date change.
+  if (dueDate !== undefined && dueDate !== task.dueDate?.toISOString()) {
+    task.dueDate = dueDate || null;
+    task.overdueNotifiedAt = null;
+  }
   if (tags !== undefined) task.tags = tags;
   if (progress !== undefined) task.progress = Number(progress);
   if (status !== undefined) {
@@ -196,6 +202,7 @@ async function updateTask(id, patch, user) {
     if (status === 'done') {
       task.completedAt = new Date();
       task.progress = 100;
+      task.overdueNotifiedAt = null;
     }
   }
 

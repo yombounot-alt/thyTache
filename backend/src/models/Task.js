@@ -103,6 +103,13 @@ const taskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Renseigné par le job planifié de détection des retards (jobs/overdueTasks.job.js)
+    // dès qu'une notification task_overdue a été envoyée, pour ne notifier
+    // qu'une seule fois par tâche (pas à chaque exécution quotidienne du job).
+    overdueNotifiedAt: {
+      type: Date,
+      default: null,
+    },
     tags: {
       type: [String],
       default: [],
