@@ -1,0 +1,44 @@
+services:
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    # Charge les secrets réels (JWT_SECRET, SMTP...) depuis backend/.env —
+    # copier backend/.env.example avant le premier `docker compose up`.
+    # MONGODB_URI/CORS_ORIGIN ci-dessous priment sur le fichier (le backend
+    # doit joindre le service `mongo`, pas 127.0.0.1, et n'autoriser que
+    # l'origine réellement servie par le conteneur frontend).
+    env_file:
+      - ./backend/.env
+    environment:
+      MONGODB_URI: mongodb://mongo:27017/task_management
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - "3000:3000"
+    volumes:
+      - backend-uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # URL relative : le navigateur appelle la même origine que la page
+        # (nginx.conf, dans l'image frontend, proxyfie /api et /uploads vers
+        # le service `backend`).
+        VITE_API_BASE_URL: /api/v1
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo-data:
+  backend-uploads:

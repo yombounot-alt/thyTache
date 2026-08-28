@@ -14,7 +14,17 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000
 // Origine seule (sans /api/v1), pour résoudre les chemins relatifs renvoyés
 // par le backend (ex: avatarUrl = "/uploads/avatars/xxx.jpg") en URL absolue
 // affichable — le backend et le frontend ne partagent pas la même origine en dev.
-export const API_ORIGIN = new URL(API_BASE_URL).origin
+// En prod derrière un reverse proxy (cf. frontend/nginx.conf), VITE_API_BASE_URL
+// peut être relative ("/api/v1") : `new URL()` sans base lève alors une
+// exception, auquel cas les ressources sont simplement sur la même origine
+// que la page (le proxy fait suivre /api et /uploads vers le backend).
+export const API_ORIGIN = (() => {
+  try {
+    return new URL(API_BASE_URL).origin
+  } catch {
+    return window.location.origin
+  }
+})()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
